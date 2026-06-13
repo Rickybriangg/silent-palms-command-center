@@ -112,7 +112,7 @@ export default function BookingsPage() {
                 ) : bookings.map((b: any) => (
                   <tr key={b.id} className="border-b border-border/50 hover:bg-muted/30 transition-colors">
                     <td className="px-4 py-3">
-                      <span className="font-mono text-xs text-muted-foreground">{b.referenceNumber.slice(-8).toUpperCase()}</span>
+                      <span className="font-mono text-xs text-muted-foreground">{(b.referenceNumber ?? b.id ?? '').slice(-8).toUpperCase()}</span>
                     </td>
                     <td className="px-4 py-3 font-medium">{b.guest?.firstName} {b.guest?.lastName}</td>
                     <td className="px-4 py-3 text-muted-foreground">{b.unit?.name}</td>
