@@ -16,6 +16,7 @@ const PLATFORMS = [
   { key: 'INSTAGRAM', label: 'Instagram', needsAccountId: true, accountIdLabel: 'IG Business ID', tokenHint: 'Graph API token', supported: false },
   { key: 'TIKTOK', label: 'TikTok', needsAccountId: false, tokenHint: 'Content Posting API token', supported: false },
   { key: 'GOOGLE_BUSINESS', label: 'Google Business', needsAccountId: true, accountIdLabel: 'Location ID', tokenHint: 'API token', supported: false },
+  { key: 'WHATSAPP', label: 'WhatsApp Business', needsAccountId: true, accountIdLabel: 'Phone Number ID', tokenHint: 'Cloud API access token', supported: true },
 ];
 
 export default function SettingsPage() {

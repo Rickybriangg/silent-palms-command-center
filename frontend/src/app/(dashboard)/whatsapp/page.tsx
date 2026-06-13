@@ -7,7 +7,9 @@ import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { ScrollArea } from '@/components/ui/scroll-area';
-import { Search, Send, Phone, User, Tag, Plus } from 'lucide-react';
+import { Label } from '@/components/ui/label';
+import { Textarea } from '@/components/ui/textarea';
+import { Search, Send, Phone, User, Tag, Plus, X, Loader2, Pencil } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { motion, AnimatePresence } from 'framer-motion';
 import { toast } from 'sonner';
@@ -28,6 +30,7 @@ export default function WhatsAppPage() {
   const [selectedGuest, setSelectedGuest] = useState<any>(null);
   const [search, setSearch] = useState('');
   const [message, setMessage] = useState('');
+  const [templateModal, setTemplateModal] = useState<{ mode: 'new' | 'edit'; template?: any } | null>(null);
   const qc = useQueryClient();
 
   const { data: conversations = [] } = useQuery({
@@ -55,11 +58,21 @@ export default function WhatsAppPage() {
 
   const sendMutation = useMutation({
     mutationFn: (body: string) => api.post('/whatsapp/send', { guestId: selectedGuest.id, body }),
-    onSuccess: () => {
+    onSuccess: (res) => {
       setMessage('');
       qc.invalidateQueries({ queryKey: ['whatsapp-messages'] });
-      toast.success('Message sent');
+      qc.invalidateQueries({ queryKey: ['whatsapp-conversations'] });
+      if (res.data?.delivered) toast.success('Delivered via WhatsApp');
+      else toast.warning(res.data?.note ?? 'Saved — WhatsApp not connected', { duration: 6000 });
     },
+    onError: (e: any) => toast.error(e?.response?.data?.error ?? 'Failed to send'),
+  });
+
+  const saveTemplate = useMutation({
+    mutationFn: ({ mode, id, data }: { mode: string; id?: string; data: any }) =>
+      mode === 'edit' ? api.put(`/whatsapp/templates/${id}`, data) : api.post('/whatsapp/templates', data),
+    onSuccess: () => { qc.invalidateQueries({ queryKey: ['whatsapp-templates'] }); toast.success('Template saved'); setTemplateModal(null); },
+    onError: (e: any) => toast.error(e?.response?.data?.error ?? 'Failed to save template'),
   });
 
   return (
@@ -241,7 +254,7 @@ export default function WhatsAppPage() {
         <div className="flex-1 overflow-y-auto p-6">
           <div className="flex items-center justify-between mb-4">
             <h3 className="font-semibold">Message Templates</h3>
-            <Button size="sm" className="gap-2"><Plus size={14} /> New Template</Button>
+            <Button size="sm" className="gap-2 bg-primary hover:bg-primary/90" onClick={() => setTemplateModal({ mode: 'new' })}><Plus size={14} /> New Template</Button>
           </div>
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
             {templates.map((t: any) => (
@@ -252,7 +265,9 @@ export default function WhatsAppPage() {
                 </div>
                 <p className="text-sm text-foreground mt-2 leading-relaxed">{t.body}</p>
                 <div className="flex gap-2 mt-3">
-                  <Button size="sm" variant="outline" className="text-xs flex-1">Edit</Button>
+                  <Button size="sm" variant="outline" className="text-xs flex-1 gap-1" onClick={() => setTemplateModal({ mode: 'edit', template: t })}>
+                    <Pencil size={12} /> Edit
+                  </Button>
                   <Button
                     size="sm"
                     className="text-xs flex-1 bg-primary hover:bg-primary/90"
@@ -266,6 +281,65 @@ export default function WhatsAppPage() {
           </div>
         </div>
       )}
+
+      {templateModal && (
+        <TemplateModal
+          mode={templateModal.mode}
+          template={templateModal.template}
+          loading={saveTemplate.isPending}
+          onClose={() => setTemplateModal(null)}
+          onSubmit={(data) => saveTemplate.mutate({ mode: templateModal.mode, id: templateModal.template?.id, data })}
+        />
+      )}
+    </div>
+  );
+}
+
+function TemplateModal({ mode, template, loading, onClose, onSubmit }: { mode: string; template?: any; loading: boolean; onClose: () => void; onSubmit: (d: any) => void }) {
+  const [form, setForm] = useState({
+    name: template?.name ?? '',
+    slug: template?.slug ?? '',
+    category: template?.category ?? 'GENERAL',
+    body: template?.body ?? '',
+  });
+  const set = (k: string, v: string) => setForm(f => ({ ...f, [k]: v }));
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4" onClick={onClose}>
+      <motion.div initial={{ opacity: 0, scale: 0.96 }} animate={{ opacity: 1, scale: 1 }}
+        className="bg-card border border-border rounded-xl w-full max-w-md p-6 shadow-xl" onClick={e => e.stopPropagation()}>
+        <div className="flex items-center justify-between mb-4">
+          <h3 className="font-semibold">{mode === 'edit' ? 'Edit Template' : 'New Template'}</h3>
+          <button onClick={onClose} className="text-muted-foreground hover:text-foreground"><X size={18} /></button>
+        </div>
+        <form
+          onSubmit={e => {
+            e.preventDefault();
+            if (!form.name || !form.slug || !form.body) return toast.error('Name, slug and body are required');
+            onSubmit(form);
+          }}
+          className="space-y-3"
+        >
+          <div className="grid grid-cols-2 gap-3">
+            <div><Label>Name</Label><Input value={form.name} onChange={e => set('name', e.target.value)} placeholder="Enquiry Response" required /></div>
+            <div><Label>Slug</Label><Input value={form.slug} onChange={e => set('slug', e.target.value)} placeholder="/enquiry" required /></div>
+          </div>
+          <div>
+            <Label>Category</Label>
+            <select className="w-full h-9 rounded-md border border-input bg-background px-3 text-sm" value={form.category} onChange={e => set('category', e.target.value)}>
+              {['GENERAL', 'ENQUIRY', 'BOOKING', 'PRE_ARRIVAL', 'CHECKOUT', 'REVIEW', 'MARKETING'].map(c => <option key={c} value={c}>{c.replace('_', ' ')}</option>)}
+            </select>
+          </div>
+          <div>
+            <Label>Message Body</Label>
+            <Textarea value={form.body} onChange={e => set('body', e.target.value)} rows={4}
+              placeholder="Hi {name}, thank you for your interest in Silent Palms Villa..." required />
+            <p className="text-[10px] text-muted-foreground mt-1">Use {'{name}'}, {'{checkIn}'}, {'{unit}'} as placeholders.</p>
+          </div>
+          <Button type="submit" className="w-full bg-primary hover:bg-primary/90" disabled={loading}>
+            {loading ? <Loader2 size={15} className="animate-spin mr-2" /> : null} {mode === 'edit' ? 'Save Changes' : 'Create Template'}
+          </Button>
+        </form>
+      </motion.div>
     </div>
   );
 }

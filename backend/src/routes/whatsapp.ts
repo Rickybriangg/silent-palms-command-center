@@ -1,6 +1,7 @@
 import { Router } from 'express';
 import { authenticate } from '../middleware/auth';
 import { prisma } from '../lib/prisma';
+import { sendWhatsApp } from '../lib/whatsappSend';
 
 const router = Router();
 router.use(authenticate);
@@ -31,26 +32,75 @@ router.get('/messages/:guestId', async (req, res) => {
 });
 
 router.post('/send', async (req, res) => {
-  const { guestId, body, templateId, mediaUrl } = req.body;
-  // In production: call WhatsApp Business API here
+  const { guestId, body, templateId, mediaUrl } = req.body ?? {};
+  if (!guestId || !body) return res.status(400).json({ error: 'guestId and body are required' });
+
+  const guest = await prisma.guest.findUnique({ where: { id: guestId } });
+  if (!guest) return res.status(404).json({ error: 'Guest not found' });
+
+  // Attempt real delivery via the WhatsApp Cloud API.
+  const result = await sendWhatsApp(guest.whatsapp || guest.phone, body);
+
+  // Record the message regardless, so the conversation thread stays accurate.
   const message = await prisma.whatsAppMessage.create({
-    data: { guestId, direction: 'OUTBOUND', body, templateId, mediaUrl, status: 'SENT' },
+    data: {
+      guestId,
+      direction: 'OUTBOUND',
+      body,
+      templateId: templateId || null,
+      mediaUrl: mediaUrl || null,
+      status: result.ok ? 'SENT' : (result.connected ? 'FAILED' : 'PENDING'),
+      messageId: result.externalId || null,
+    },
   });
-  res.status(201).json(message);
+
+  res.status(201).json({
+    message,
+    delivered: result.ok,
+    note: result.ok
+      ? 'Delivered via WhatsApp.'
+      : result.error,
+  });
 });
 
-// CRM Pipeline
-router.get('/pipeline', async (_req, res) => {
-  const statuses = ['NEW_ENQUIRY', 'QUOTE_SENT', 'BOOKED', 'ARRIVING', 'STAYING', 'CHECKED_OUT', 'REVIEW_PENDING', 'REPEAT_GUEST'];
-  const pipeline: Record<string, any[]> = {};
+// CRM Pipeline — guests grouped into stages derived from their bookings.
+const PIPELINE_STAGES = ['NEW_ENQUIRY', 'QUOTE_SENT', 'BOOKED', 'ARRIVING', 'STAYING', 'CHECKED_OUT', 'REVIEW_PENDING', 'REPEAT_GUEST'];
 
-  for (const status of statuses) {
-    const guests = await prisma.guest.findMany({
-      where: { tags: { contains: status } },
-      include: { _count: { select: { bookings: true } } },
-      take: 20,
+// Map a guest (with their bookings) to a single pipeline stage.
+function deriveStage(guest: any): string {
+  const bookings = guest.bookings ?? [];
+  if (bookings.length === 0) {
+    // No bookings yet: a lead/enquiry. A sent quote is signalled by a tag.
+    const tags = (() => { try { return JSON.parse(guest.tags || '[]'); } catch { return []; } })();
+    return tags.includes('quote_sent') ? 'QUOTE_SENT' : 'NEW_ENQUIRY';
+  }
+  if (bookings.length > 1 && bookings.some((b: any) => b.status === 'CHECKED_OUT')) return 'REPEAT_GUEST';
+  // Use the most relevant current booking status.
+  const statuses = bookings.map((b: any) => b.status);
+  if (statuses.includes('CHECKED_IN')) return 'STAYING';
+  if (statuses.includes('ARRIVING')) return 'ARRIVING';
+  if (statuses.includes('CONFIRMED') || statuses.includes('PENDING')) return 'BOOKED';
+  if (statuses.includes('CHECKED_OUT')) return 'REVIEW_PENDING';
+  return 'BOOKED';
+}
+
+router.get('/pipeline', async (_req, res) => {
+  const guests = await prisma.guest.findMany({
+    include: {
+      bookings: { select: { status: true } },
+      _count: { select: { bookings: true } },
+    },
+    take: 200,
+  });
+
+  const pipeline: Record<string, any[]> = {};
+  for (const stage of PIPELINE_STAGES) pipeline[stage] = [];
+  for (const guest of guests) {
+    const stage = deriveStage(guest);
+    pipeline[stage].push({
+      id: guest.id, firstName: guest.firstName, lastName: guest.lastName,
+      phone: guest.phone, _count: guest._count,
     });
-    pipeline[status] = guests;
   }
   res.json(pipeline);
 });

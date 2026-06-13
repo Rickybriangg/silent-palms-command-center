@@ -196,7 +196,7 @@ router.post('/upload-batch', upload.single('file'), async (req, res) => {
 });
 
 // --- Social Accounts (credentials for auto-publishing) ---
-const SOCIAL_PLATFORMS = ['INSTAGRAM', 'FACEBOOK', 'TWITTER', 'TIKTOK', 'GOOGLE_BUSINESS'];
+const SOCIAL_PLATFORMS = ['INSTAGRAM', 'FACEBOOK', 'TWITTER', 'TIKTOK', 'GOOGLE_BUSINESS', 'WHATSAPP'];
 
 // List connection status for every platform. Never returns the access token.
 router.get('/social-accounts', async (_req, res) => {
