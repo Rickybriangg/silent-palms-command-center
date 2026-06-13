@@ -1,9 +1,14 @@
 'use client';
-import { useQuery } from '@tanstack/react-query';
+import { useState } from 'react';
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { api } from '@/lib/api';
 import { Header } from '@/components/layout/Header';
-import { Badge } from '@/components/ui/badge';
-import { Mail, Phone, Shield, CheckCircle2, XCircle } from 'lucide-react';
+import { Button } from '@/components/ui/button';
+import { Input } from '@/components/ui/input';
+import { Label } from '@/components/ui/label';
+import { Mail, Phone, CheckCircle2, XCircle, UserPlus, X, Loader2 } from 'lucide-react';
+import { toast } from 'sonner';
+import { motion } from 'framer-motion';
 
 const ROLE_COLORS: Record<string, string> = {
   SUPER_ADMIN: 'bg-primary/10 text-primary',
@@ -14,16 +19,27 @@ const ROLE_COLORS: Record<string, string> = {
 };
 
 export default function TeamPage() {
+  const qc = useQueryClient();
+  const [showAdd, setShowAdd] = useState(false);
   const { data: members = [], isLoading } = useQuery({
     queryKey: ['team'],
     queryFn: () => api.get('/users').then(r => r.data),
+  });
+
+  const addStaff = useMutation({
+    mutationFn: (data: any) => api.post('/auth/register', data),
+    onSuccess: () => { qc.invalidateQueries({ queryKey: ['team'] }); toast.success('Staff member added'); setShowAdd(false); },
+    onError: (e: any) => toast.error(e?.response?.data?.error ?? 'Failed to add staff'),
   });
 
   return (
     <div>
       <Header title="Team" subtitle="Staff, roles & access" />
       <div className="p-6">
-        <p className="text-sm text-muted-foreground mb-4">{members.length} team member{members.length === 1 ? '' : 's'}</p>
+        <div className="flex items-center justify-between mb-4">
+          <p className="text-sm text-muted-foreground">{members.length} team member{members.length === 1 ? '' : 's'}</p>
+          <Button size="sm" className="gap-2 bg-primary hover:bg-primary/90" onClick={() => setShowAdd(true)}><UserPlus size={14} /> Add Staff</Button>
+        </div>
 
         {isLoading ? (
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
@@ -60,6 +76,50 @@ export default function TeamPage() {
           </div>
         )}
       </div>
+
+      {showAdd && <AddStaffModal onClose={() => setShowAdd(false)} onSubmit={(d) => addStaff.mutate(d)} loading={addStaff.isPending} />}
+    </div>
+  );
+}
+
+function AddStaffModal({ onClose, onSubmit, loading }: { onClose: () => void; onSubmit: (d: any) => void; loading: boolean }) {
+  const { data: roles = [] } = useQuery({ queryKey: ['roles'], queryFn: () => api.get('/users/roles').then(r => r.data) });
+  const [form, setForm] = useState({ firstName: '', lastName: '', email: '', password: '', roleId: '' });
+  const set = (k: string, v: string) => setForm(f => ({ ...f, [k]: v }));
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4" onClick={onClose}>
+      <motion.div initial={{ opacity: 0, scale: 0.96 }} animate={{ opacity: 1, scale: 1 }}
+        className="bg-card border border-border rounded-xl w-full max-w-md p-6 shadow-xl" onClick={e => e.stopPropagation()}>
+        <div className="flex items-center justify-between mb-4">
+          <h3 className="font-semibold">Add Staff Member</h3>
+          <button onClick={onClose} className="text-muted-foreground hover:text-foreground"><X size={18} /></button>
+        </div>
+        <form onSubmit={e => {
+          e.preventDefault();
+          if (!form.firstName || !form.lastName) return toast.error('Name is required');
+          if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(form.email)) return toast.error('Valid email required');
+          if (form.password.length < 8) return toast.error('Password must be at least 8 characters');
+          if (!form.roleId) return toast.error('Select a role');
+          onSubmit(form);
+        }} className="space-y-3">
+          <div className="grid grid-cols-2 gap-3">
+            <div><Label>First name</Label><Input value={form.firstName} onChange={e => set('firstName', e.target.value)} required /></div>
+            <div><Label>Last name</Label><Input value={form.lastName} onChange={e => set('lastName', e.target.value)} required /></div>
+          </div>
+          <div><Label>Email</Label><Input type="email" value={form.email} onChange={e => set('email', e.target.value)} placeholder="staff@silentpalms.com" required /></div>
+          <div><Label>Temporary password</Label><Input type="text" value={form.password} onChange={e => set('password', e.target.value)} placeholder="min 8 characters" required /></div>
+          <div>
+            <Label>Role</Label>
+            <select className="w-full h-9 rounded-md border border-input bg-background px-3 text-sm" value={form.roleId} onChange={e => set('roleId', e.target.value)} required>
+              <option value="">Select a role…</option>
+              {roles.map((r: any) => <option key={r.id} value={r.id}>{r.name.replace(/_/g, ' ')}</option>)}
+            </select>
+          </div>
+          <Button type="submit" className="w-full bg-primary hover:bg-primary/90" disabled={loading}>
+            {loading ? <Loader2 size={15} className="animate-spin mr-2" /> : null} Add Staff
+          </Button>
+        </form>
+      </motion.div>
     </div>
   );
 }

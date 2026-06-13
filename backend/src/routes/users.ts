@@ -5,6 +5,12 @@ import { authenticate, AuthRequest } from '../middleware/auth';
 const router = Router();
 const prisma = new PrismaClient();
 
+// List all roles (for the Add Staff form)
+router.get('/roles', authenticate, async (_req: AuthRequest, res: Response) => {
+  const roles = await prisma.role.findMany({ select: { id: true, name: true }, orderBy: { name: 'asc' } });
+  res.json(roles);
+});
+
 // List all team members
 router.get('/', authenticate, async (_req: AuthRequest, res: Response) => {
   const users = await prisma.user.findMany({

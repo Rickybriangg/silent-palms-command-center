@@ -1,15 +1,24 @@
 'use client';
 import { useState } from 'react';
-import { useQuery } from '@tanstack/react-query';
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { api } from '@/lib/api';
 import { Header } from '@/components/layout/Header';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
+import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { CalendarDays, Plus, Search, Filter } from 'lucide-react';
+import { CalendarDays, Plus, Search, Filter, X, Loader2 } from 'lucide-react';
 import { cn } from '@/lib/utils';
+import { toast } from 'sonner';
+import { motion } from 'framer-motion';
 import { BookingCalendar } from '@/components/bookings/BookingCalendar';
+
+const UNITS = [
+  { id: 'whole-villa', name: 'Whole Villa', basePrice: 500 },
+  { id: 'two-bedroom', name: '2-Bedroom Unit', basePrice: 280 },
+];
+const CHANNELS = ['DIRECT', 'AIRBNB', 'BOOKING_COM', 'EXPEDIA', 'WHATSAPP'];
 
 const STATUS_COLORS: Record<string, string> = {
   PENDING: 'bg-amber-100 text-amber-700',
@@ -34,10 +43,19 @@ export default function BookingsPage() {
   const [search, setSearch] = useState('');
   const [status, setStatus] = useState('');
   const [channel, setChannel] = useState('');
+  const [showNew, setShowNew] = useState(false);
+  const [viewing, setViewing] = useState<any | null>(null);
+  const qc = useQueryClient();
 
   const { data, isLoading } = useQuery({
     queryKey: ['bookings', search, status, channel],
     queryFn: () => api.get(`/bookings?search=${search}&status=${status}&channel=${channel}`).then(r => r.data),
+  });
+
+  const createBooking = useMutation({
+    mutationFn: (payload: any) => api.post('/bookings', payload),
+    onSuccess: () => { qc.invalidateQueries({ queryKey: ['bookings'] }); toast.success('Booking created'); setShowNew(false); },
+    onError: (e: any) => toast.error(e?.response?.data?.error ?? 'Failed to create booking'),
   });
 
   const bookings = data?.data ?? [];
@@ -82,7 +100,7 @@ export default function BookingsPage() {
                 </button>
               ))}
             </div>
-            <Button size="sm" className="gap-2 bg-primary hover:bg-primary/90">
+            <Button size="sm" className="gap-2 bg-primary hover:bg-primary/90" onClick={() => setShowNew(true)}>
               <Plus size={14} /> New Booking
             </Button>
           </div>
@@ -130,7 +148,7 @@ export default function BookingsPage() {
                       <span className={cn('text-xs px-2 py-0.5 rounded-full font-medium', STATUS_COLORS[b.status] ?? 'bg-gray-100')}>{b.status}</span>
                     </td>
                     <td className="px-4 py-3">
-                      <Button variant="ghost" size="sm" className="h-7 text-xs">View</Button>
+                      <Button variant="ghost" size="sm" className="h-7 text-xs" onClick={() => setViewing(b)}>View</Button>
                     </td>
                   </tr>
                 ))}
@@ -142,6 +160,109 @@ export default function BookingsPage() {
           </div>
         )}
       </div>
+
+      {showNew && <NewBookingModal onClose={() => setShowNew(false)} onSubmit={(d) => createBooking.mutate(d)} loading={createBooking.isPending} />}
+      {viewing && <ViewBookingModal booking={viewing} onClose={() => setViewing(null)} />}
     </div>
+  );
+}
+
+function ModalShell({ title, onClose, children }: { title: string; onClose: () => void; children: React.ReactNode }) {
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4" onClick={onClose}>
+      <motion.div initial={{ opacity: 0, scale: 0.96 }} animate={{ opacity: 1, scale: 1 }}
+        className="bg-card border border-border rounded-xl w-full max-w-md p-6 shadow-xl max-h-[90vh] overflow-y-auto" onClick={e => e.stopPropagation()}>
+        <div className="flex items-center justify-between mb-4">
+          <h3 className="font-semibold">{title}</h3>
+          <button onClick={onClose} className="text-muted-foreground hover:text-foreground"><X size={18} /></button>
+        </div>
+        {children}
+      </motion.div>
+    </div>
+  );
+}
+
+function NewBookingModal({ onClose, onSubmit, loading }: { onClose: () => void; onSubmit: (d: any) => void; loading: boolean }) {
+  const { data: guests = [] } = useQuery({ queryKey: ['guests-for-booking'], queryFn: () => api.get('/guests').then(r => r.data?.data ?? r.data) });
+  const [form, setForm] = useState({ guestId: '', unitId: 'whole-villa', channel: 'DIRECT', status: 'CONFIRMED', checkIn: '', checkOut: '', adults: '2', baseAmount: '' });
+  const set = (k: string, v: string) => setForm(f => ({ ...f, [k]: v }));
+  const guestList = Array.isArray(guests) ? guests : [];
+
+  return (
+    <ModalShell title="New Booking" onClose={onClose}>
+      <form onSubmit={e => {
+        e.preventDefault();
+        if (!form.guestId) return toast.error('Select a guest');
+        if (!form.checkIn || !form.checkOut) return toast.error('Select check-in and check-out dates');
+        const base = Number(form.baseAmount || 0);
+        onSubmit({ ...form, adults: Number(form.adults), baseAmount: base, taxAmount: Math.round(base * 0.16), totalAmount: base + Math.round(base * 0.16) });
+      }} className="space-y-3">
+        <div>
+          <Label>Guest</Label>
+          <select className="w-full h-9 rounded-md border border-input bg-background px-3 text-sm" value={form.guestId} onChange={e => set('guestId', e.target.value)} required>
+            <option value="">Select a guest…</option>
+            {guestList.map((g: any) => <option key={g.id} value={g.id}>{g.firstName} {g.lastName} — {g.phone}</option>)}
+          </select>
+        </div>
+        <div className="grid grid-cols-2 gap-3">
+          <div>
+            <Label>Unit</Label>
+            <select className="w-full h-9 rounded-md border border-input bg-background px-3 text-sm" value={form.unitId} onChange={e => { set('unitId', e.target.value); const u = UNITS.find(x => x.id === e.target.value); if (u && !form.baseAmount) set('baseAmount', String(u.basePrice)); }}>
+              {UNITS.map(u => <option key={u.id} value={u.id}>{u.name}</option>)}
+            </select>
+          </div>
+          <div>
+            <Label>Channel</Label>
+            <select className="w-full h-9 rounded-md border border-input bg-background px-3 text-sm" value={form.channel} onChange={e => set('channel', e.target.value)}>
+              {CHANNELS.map(c => <option key={c} value={c}>{c.replace('_', '.')}</option>)}
+            </select>
+          </div>
+        </div>
+        <div className="grid grid-cols-2 gap-3">
+          <div><Label>Check-in</Label><Input type="date" value={form.checkIn} onChange={e => set('checkIn', e.target.value)} required /></div>
+          <div><Label>Check-out</Label><Input type="date" value={form.checkOut} onChange={e => set('checkOut', e.target.value)} required /></div>
+        </div>
+        <div className="grid grid-cols-2 gap-3">
+          <div><Label>Adults</Label><Input type="number" min="1" value={form.adults} onChange={e => set('adults', e.target.value)} /></div>
+          <div><Label>Amount ($)</Label><Input type="number" value={form.baseAmount} onChange={e => set('baseAmount', e.target.value)} placeholder="500" /></div>
+        </div>
+        <div>
+          <Label>Status</Label>
+          <select className="w-full h-9 rounded-md border border-input bg-background px-3 text-sm" value={form.status} onChange={e => set('status', e.target.value)}>
+            {['PENDING', 'CONFIRMED', 'ARRIVING', 'CHECKED_IN', 'CHECKED_OUT'].map(s => <option key={s} value={s}>{s}</option>)}
+          </select>
+        </div>
+        <Button type="submit" className="w-full bg-primary hover:bg-primary/90" disabled={loading}>
+          {loading ? <Loader2 size={15} className="animate-spin mr-2" /> : null} Create Booking
+        </Button>
+      </form>
+    </ModalShell>
+  );
+}
+
+function ViewBookingModal({ booking, onClose }: { booking: any; onClose: () => void }) {
+  const row = (label: string, value: any) => (
+    <div className="flex justify-between py-1.5 border-b border-border/50 text-sm">
+      <span className="text-muted-foreground">{label}</span>
+      <span className="font-medium text-right">{value ?? '—'}</span>
+    </div>
+  );
+  return (
+    <ModalShell title={`Booking ${(booking.referenceNumber ?? '').slice(-8).toUpperCase()}`} onClose={onClose}>
+      <div className="space-y-0.5">
+        {row('Guest', `${booking.guest?.firstName ?? ''} ${booking.guest?.lastName ?? ''}`)}
+        {row('Phone', booking.guest?.phone)}
+        {row('Unit', booking.unit?.name)}
+        {row('Channel', booking.channel)}
+        {row('Status', booking.status)}
+        {row('Check-in', booking.checkIn ? new Date(booking.checkIn).toLocaleDateString() : '—')}
+        {row('Check-out', booking.checkOut ? new Date(booking.checkOut).toLocaleDateString() : '—')}
+        {row('Nights', booking.nights)}
+        {row('Adults', booking.adults)}
+        {row('Total', `$${Number(booking.totalAmount ?? 0).toLocaleString()}`)}
+        {row('Paid', `$${Number(booking.paidAmount ?? 0).toLocaleString()}`)}
+      </div>
+      <Button className="w-full mt-4" variant="outline" onClick={onClose}>Close</Button>
+    </ModalShell>
   );
 }

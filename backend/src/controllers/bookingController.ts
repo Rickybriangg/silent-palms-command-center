@@ -43,12 +43,36 @@ export const getBooking = async (req: Request, res: Response) => {
 };
 
 export const createBooking = async (req: AuthRequest, res: Response) => {
-  const data = req.body;
-  const nights = Math.ceil(
+  const data = req.body ?? {};
+  if (!data.guestId || !data.unitId || !data.checkIn || !data.checkOut) {
+    return res.status(400).json({ error: 'guest, unit, check-in and check-out are required' });
+  }
+  const nights = Math.max(1, Math.ceil(
     (new Date(data.checkOut).getTime() - new Date(data.checkIn).getTime()) / (1000 * 60 * 60 * 24)
-  );
+  ));
+  const baseAmount = Number(data.baseAmount ?? 0);
+  const taxAmount = Number(data.taxAmount ?? 0);
+  const totalAmount = Number(data.totalAmount ?? baseAmount + taxAmount);
+  const referenceNumber = data.referenceNumber ||
+    ('SP' + Date.now().toString(36).toUpperCase() + Math.random().toString(36).slice(2, 5).toUpperCase());
+
   const booking = await prisma.booking.create({
-    data: { ...data, nights, checkIn: new Date(data.checkIn), checkOut: new Date(data.checkOut) },
+    data: {
+      referenceNumber,
+      guestId: data.guestId,
+      unitId: data.unitId,
+      propertyId: data.propertyId || 'silent-palms-villa',
+      channel: data.channel || 'DIRECT',
+      status: data.status || 'PENDING',
+      nights,
+      adults: Number(data.adults ?? 1),
+      children: Number(data.children ?? 0),
+      baseAmount, taxAmount, totalAmount,
+      currency: data.currency || 'USD',
+      notes: data.notes || null,
+      checkIn: new Date(data.checkIn),
+      checkOut: new Date(data.checkOut),
+    },
     include: { guest: true, unit: true },
   });
 

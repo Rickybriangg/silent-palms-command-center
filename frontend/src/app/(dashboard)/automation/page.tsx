@@ -1,10 +1,13 @@
 'use client';
+import { useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { api } from '@/lib/api';
 import { Header } from '@/components/layout/Header';
 import { Button } from '@/components/ui/button';
-import { Badge } from '@/components/ui/badge';
-import { Zap, Play, Pause, Plus, ChevronRight, Clock, BarChart2 } from 'lucide-react';
+import { Input } from '@/components/ui/input';
+import { Label } from '@/components/ui/label';
+import { Textarea } from '@/components/ui/textarea';
+import { Zap, Plus, ChevronRight, Clock, BarChart2, X, Loader2 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { toast } from 'sonner';
 import { motion } from 'framer-motion';
@@ -28,10 +31,17 @@ const ACTION_ICONS: Record<string, string> = {
 
 export default function AutomationPage() {
   const qc = useQueryClient();
+  const [showNew, setShowNew] = useState(false);
 
   const { data: workflows = [] } = useQuery({
     queryKey: ['workflows'],
     queryFn: () => api.get('/automation').then(r => r.data),
+  });
+
+  const createWorkflow = useMutation({
+    mutationFn: (data: any) => api.post('/automation', data),
+    onSuccess: () => { qc.invalidateQueries({ queryKey: ['workflows'] }); toast.success('Workflow created'); setShowNew(false); },
+    onError: (e: any) => toast.error(e?.response?.data?.error ?? 'Failed to create workflow'),
   });
 
   const toggleMutation = useMutation({
@@ -57,7 +67,7 @@ export default function AutomationPage() {
                 Load Default Workflows
               </Button>
             )}
-            <Button size="sm" className="gap-2 bg-primary hover:bg-primary/90">
+            <Button size="sm" className="gap-2 bg-primary hover:bg-primary/90" onClick={() => setShowNew(true)}>
               <Plus size={14} /> New Workflow
             </Button>
           </div>
@@ -137,6 +147,56 @@ export default function AutomationPage() {
           )}
         </div>
       </div>
+
+      {showNew && <NewWorkflowModal onClose={() => setShowNew(false)} onSubmit={(d) => createWorkflow.mutate(d)} loading={createWorkflow.isPending} />}
+    </div>
+  );
+}
+
+function NewWorkflowModal({ onClose, onSubmit, loading }: { onClose: () => void; onSubmit: (d: any) => void; loading: boolean }) {
+  const [form, setForm] = useState({ name: '', description: '', trigger: 'BOOKING_CREATED', action: 'SEND_WHATSAPP', template: '' });
+  const set = (k: string, v: string) => setForm(f => ({ ...f, [k]: v }));
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4" onClick={onClose}>
+      <motion.div initial={{ opacity: 0, scale: 0.96 }} animate={{ opacity: 1, scale: 1 }}
+        className="bg-card border border-border rounded-xl w-full max-w-md p-6 shadow-xl" onClick={e => e.stopPropagation()}>
+        <div className="flex items-center justify-between mb-4">
+          <h3 className="font-semibold">New Workflow</h3>
+          <button onClick={onClose} className="text-muted-foreground hover:text-foreground"><X size={18} /></button>
+        </div>
+        <form onSubmit={e => {
+          e.preventDefault();
+          if (!form.name) return toast.error('Name is required');
+          onSubmit({
+            name: form.name,
+            description: form.description || null,
+            trigger: JSON.stringify({ event: form.trigger }),
+            actions: JSON.stringify([{ type: form.action, config: form.template ? { template: form.template } : {} }]),
+            isActive: true,
+          });
+        }} className="space-y-3">
+          <div><Label>Name</Label><Input value={form.name} onChange={e => set('name', e.target.value)} placeholder="Pre-arrival reminder" required /></div>
+          <div><Label>Description</Label><Textarea value={form.description} onChange={e => set('description', e.target.value)} rows={2} /></div>
+          <div>
+            <Label>When (trigger)</Label>
+            <select className="w-full h-9 rounded-md border border-input bg-background px-3 text-sm" value={form.trigger} onChange={e => set('trigger', e.target.value)}>
+              {Object.entries(TRIGGER_LABELS).map(([k, v]) => <option key={k} value={k}>{v}</option>)}
+            </select>
+          </div>
+          <div>
+            <Label>Then (action)</Label>
+            <select className="w-full h-9 rounded-md border border-input bg-background px-3 text-sm" value={form.action} onChange={e => set('action', e.target.value)}>
+              {Object.keys(ACTION_ICONS).map(k => <option key={k} value={k}>{k.replace(/_/g, ' ')}</option>)}
+            </select>
+          </div>
+          {form.action === 'SEND_WHATSAPP' && (
+            <div><Label>Template slug (optional)</Label><Input value={form.template} onChange={e => set('template', e.target.value)} placeholder="enquiry" /></div>
+          )}
+          <Button type="submit" className="w-full bg-primary hover:bg-primary/90" disabled={loading}>
+            {loading ? <Loader2 size={15} className="animate-spin mr-2" /> : null} Create Workflow
+          </Button>
+        </form>
+      </motion.div>
     </div>
   );
 }
