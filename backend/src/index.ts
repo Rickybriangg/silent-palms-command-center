@@ -11,6 +11,9 @@ import routes from './routes';
 const app = express();
 const PORT = process.env.PORT || 4000;
 
+// Behind Railway's proxy — required for express-rate-limit to read client IPs
+app.set('trust proxy', 1);
+
 // Security & middleware
 app.use(helmet());
 app.use(cors({ origin: process.env.FRONTEND_URL, credentials: true }));

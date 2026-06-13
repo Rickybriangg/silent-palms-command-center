@@ -22,28 +22,43 @@ router.post('/generate', async (req, res) => {
     revenue_forecast: `Analyze and forecast revenue for Silent Palms Villa. Historical data: ${JSON.stringify(context.history)}. Provide insights and 3-month forecast.`,
   };
 
-  const prompt = prompts[type] || context.customPrompt;
+  const prompt = prompts[type] || context?.customPrompt;
   if (!prompt) return res.status(400).json({ error: 'Invalid generation type' });
 
-  const message = await anthropic.messages.create({
-    model: 'claude-sonnet-4-6',
-    max_tokens: 2000,
-    system: systemPrompt,
-    messages: [{ role: 'user', content: prompt }],
-  });
-
-  res.json({ content: (message.content[0] as any).text });
+  try {
+    const message = await anthropic.messages.create({
+      model: 'claude-sonnet-4-6',
+      max_tokens: 2000,
+      system: systemPrompt,
+      messages: [{ role: 'user', content: prompt }],
+    });
+    res.json({ content: (message.content[0] as any).text });
+  } catch (err: any) {
+    res.status(err?.status ?? 500).json({ error: err?.error?.error?.message ?? err?.message ?? 'AI request failed' });
+  }
 });
 
 router.post('/chat', async (req, res) => {
-  const { messages } = req.body;
-  const response = await anthropic.messages.create({
-    model: 'claude-sonnet-4-6',
-    max_tokens: 1000,
-    system: systemPrompt,
-    messages,
-  });
-  res.json({ message: (response.content[0] as any).text });
+  const { messages, message } = req.body;
+  // Accept either a `messages` array or a single `message` string
+  const msgs = Array.isArray(messages)
+    ? messages
+    : message
+      ? [{ role: 'user', content: String(message) }]
+      : null;
+  if (!msgs) return res.status(400).json({ error: 'Provide `messages` (array) or `message` (string)' });
+
+  try {
+    const response = await anthropic.messages.create({
+      model: 'claude-sonnet-4-6',
+      max_tokens: 1000,
+      system: systemPrompt,
+      messages: msgs,
+    });
+    res.json({ message: (response.content[0] as any).text });
+  } catch (err: any) {
+    res.status(err?.status ?? 500).json({ error: err?.error?.error?.message ?? err?.message ?? 'AI request failed' });
+  }
 });
 
 export default router;
