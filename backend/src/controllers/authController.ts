@@ -8,9 +8,12 @@ const signToken = (userId: string) =>
   jwt.sign({ userId }, process.env.JWT_SECRET!, { expiresIn: '7d' });
 
 export const login = async (req: Request, res: Response) => {
-  const { email, password } = req.body;
-  const user = await prisma.user.findUnique({ where: { email }, include: { role: true } });
-  if (!user || !await bcrypt.compare(password, user.passwordHash)) {
+  const { email, password } = req.body ?? {};
+  if (typeof email !== 'string' || typeof password !== 'string' || !email || !password) {
+    return res.status(400).json({ error: 'Email and password are required' });
+  }
+  const user = await prisma.user.findUnique({ where: { email: email.toLowerCase().trim() }, include: { role: true } });
+  if (!user || !user.isActive || !await bcrypt.compare(password, user.passwordHash)) {
     return res.status(401).json({ error: 'Invalid credentials' });
   }
   await prisma.user.update({ where: { id: user.id }, data: { lastLoginAt: new Date() } });
@@ -18,17 +21,40 @@ export const login = async (req: Request, res: Response) => {
   res.json({ token, user: { id: user.id, email: user.email, firstName: user.firstName, lastName: user.lastName, role: user.role.name } });
 };
 
+// Admin-only: create a staff member. Route enforces authenticate + SUPER_ADMIN.
 export const register = async (req: Request, res: Response) => {
-  const { email, password, firstName, lastName, roleId } = req.body;
-  const exists = await prisma.user.findUnique({ where: { email } });
-  if (exists) return res.status(400).json({ error: 'Email already registered' });
+  const { email, password, firstName, lastName, roleId } = req.body ?? {};
+  if (typeof email !== 'string' || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+    return res.status(400).json({ error: 'A valid email is required' });
+  }
+  if (typeof password !== 'string' || password.length < 8) {
+    return res.status(400).json({ error: 'Password must be at least 8 characters' });
+  }
+  if (!firstName || !lastName) {
+    return res.status(400).json({ error: 'First and last name are required' });
+  }
+
+  const normalizedEmail = email.toLowerCase().trim();
+  const exists = await prisma.user.findUnique({ where: { email: normalizedEmail } });
+  if (exists) return res.status(409).json({ error: 'Email already registered' });
+
+  // Validate the requested role; never trust an arbitrary roleId blindly.
+  let resolvedRoleId = roleId;
+  if (resolvedRoleId) {
+    const role = await prisma.role.findUnique({ where: { id: resolvedRoleId } });
+    if (!role) return res.status(400).json({ error: 'Invalid role' });
+  } else {
+    const defaultRole = await prisma.role.findUnique({ where: { name: 'GUEST_RELATIONS' } });
+    if (!defaultRole) return res.status(400).json({ error: 'No default role configured' });
+    resolvedRoleId = defaultRole.id;
+  }
+
   const passwordHash = await bcrypt.hash(password, 12);
   const user = await prisma.user.create({
-    data: { email, passwordHash, firstName, lastName, roleId },
+    data: { email: normalizedEmail, passwordHash, firstName, lastName, roleId: resolvedRoleId },
     include: { role: true },
   });
-  const token = signToken(user.id);
-  res.status(201).json({ token, user: { id: user.id, email: user.email, role: user.role.name } });
+  res.status(201).json({ user: { id: user.id, email: user.email, firstName: user.firstName, lastName: user.lastName, role: user.role.name } });
 };
 
 export const me = async (req: AuthRequest, res: Response) => {
