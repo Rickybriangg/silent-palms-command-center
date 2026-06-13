@@ -1,10 +1,41 @@
-import { Router } from 'express';
-import { authenticate } from '../middleware/auth';
+import { Router, Response } from 'express';
+import { authenticate, authorize, AuthRequest } from '../middleware/auth';
 import { prisma } from '../lib/prisma';
 import { startOfMonth, endOfMonth, startOfYear, endOfYear, subMonths } from 'date-fns';
 
 const router = Router();
 router.use(authenticate);
+
+// Finance cash flow (inflow vs outflow) — restricted to Finance Manager & Super Admin.
+router.get('/cashflow', authorize('SUPER_ADMIN', 'FINANCE_MANAGER'), async (req: AuthRequest, res: Response) => {
+  const { period = 'month' } = req.query as { period: string };
+  const now = new Date();
+  const start = period === 'year' ? startOfYear(now) : startOfMonth(now);
+  const end = period === 'year' ? endOfYear(now) : endOfMonth(now);
+
+  const [revenue, expenses] = await Promise.all([
+    prisma.revenue.findMany({ where: { date: { gte: start, lte: end } }, orderBy: { date: 'desc' } }),
+    prisma.expense.findMany({ where: { date: { gte: start, lte: end } }, orderBy: { date: 'desc' } }),
+  ]);
+
+  const groupSum = (rows: any[], key: string) => {
+    const m = new Map<string, number>();
+    for (const r of rows) m.set(r[key] || 'Other', (m.get(r[key] || 'Other') ?? 0) + Number(r.amount));
+    return [...m.entries()].map(([category, amount]) => ({ category, amount })).sort((a, b) => b.amount - a.amount);
+  };
+
+  const totalIn = revenue.reduce((s, r) => s + Number(r.amount), 0);
+  const totalOut = expenses.reduce((s, e) => s + Number(e.amount), 0);
+
+  res.json({
+    period,
+    inflow: groupSum(revenue, 'category'),
+    outflow: groupSum(expenses, 'category'),
+    totalIn, totalOut, net: totalIn - totalOut,
+    recentInflow: revenue.slice(0, 10).map(r => ({ date: r.date, source: r.source, category: r.category, amount: r.amount, description: r.description })),
+    recentOutflow: expenses.slice(0, 10).map(e => ({ date: e.date, vendor: e.vendor, category: e.category, amount: e.amount, description: e.description })),
+  });
+});
 
 router.get('/summary', async (req, res) => {
   const { period = 'month' } = req.query as { period: string };

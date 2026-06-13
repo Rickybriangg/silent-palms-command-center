@@ -43,6 +43,7 @@ model User {
   roleId        String
   role          Role      @relation(fields: [roleId], references: [id])
   isActive      Boolean   @default(true)
+  joinCode      String? // 6-digit code a new staff member uses to verify & set their password
   lastLoginAt   DateTime?
   createdAt     DateTime  @default(now())
   updatedAt     DateTime  @updatedAt

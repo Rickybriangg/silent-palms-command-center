@@ -22,23 +22,25 @@ export const login = async (req: Request, res: Response) => {
 };
 
 // Admin-only: create a staff member. Route enforces authenticate + SUPER_ADMIN.
+// If no password is supplied, the account is created PENDING with a 6-digit join
+// code that the staff member uses (with their email) to verify and set a password.
 export const register = async (req: Request, res: Response) => {
-  const { email, password, firstName, lastName, roleId } = req.body ?? {};
+  const { email, password, firstName, lastName, phone, roleId } = req.body ?? {};
   if (typeof email !== 'string' || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
     return res.status(400).json({ error: 'A valid email is required' });
   }
-  if (typeof password !== 'string' || password.length < 8) {
-    return res.status(400).json({ error: 'Password must be at least 8 characters' });
-  }
   if (!firstName || !lastName) {
     return res.status(400).json({ error: 'First and last name are required' });
+  }
+  const usingCode = !password;
+  if (!usingCode && (typeof password !== 'string' || password.length < 8)) {
+    return res.status(400).json({ error: 'Password must be at least 8 characters' });
   }
 
   const normalizedEmail = email.toLowerCase().trim();
   const exists = await prisma.user.findUnique({ where: { email: normalizedEmail } });
   if (exists) return res.status(409).json({ error: 'Email already registered' });
 
-  // Validate the requested role; never trust an arbitrary roleId blindly.
   let resolvedRoleId = roleId;
   if (resolvedRoleId) {
     const role = await prisma.role.findUnique({ where: { id: resolvedRoleId } });
@@ -49,12 +51,38 @@ export const register = async (req: Request, res: Response) => {
     resolvedRoleId = defaultRole.id;
   }
 
-  const passwordHash = await bcrypt.hash(password, 12);
+  const joinCode = usingCode ? String(Math.floor(100000 + Math.random() * 900000)) : null;
+  // Pending accounts get a random placeholder hash until they verify.
+  const passwordHash = await bcrypt.hash(usingCode ? Math.random().toString(36) : password, 12);
+
   const user = await prisma.user.create({
-    data: { email: normalizedEmail, passwordHash, firstName, lastName, roleId: resolvedRoleId },
+    data: {
+      email: normalizedEmail, passwordHash, firstName, lastName,
+      phone: phone || null, roleId: resolvedRoleId,
+      isActive: !usingCode, joinCode,
+    },
     include: { role: true },
   });
-  res.status(201).json({ user: { id: user.id, email: user.email, firstName: user.firstName, lastName: user.lastName, role: user.role.name } });
+  res.status(201).json({
+    user: { id: user.id, email: user.email, firstName: user.firstName, lastName: user.lastName, role: user.role.name, isActive: user.isActive },
+    joinCode, // returned to the admin to share with the new staff member
+  });
+};
+
+// Public: a new staff member verifies their email + 6-digit code and sets a password.
+export const joinStaff = async (req: Request, res: Response) => {
+  const { email, code, password } = req.body ?? {};
+  if (!email || !code || !password) return res.status(400).json({ error: 'Email, code and password are required' });
+  if (String(password).length < 8) return res.status(400).json({ error: 'Password must be at least 8 characters' });
+
+  const user = await prisma.user.findUnique({ where: { email: String(email).toLowerCase().trim() }, include: { role: true } });
+  if (!user || !user.joinCode || user.joinCode !== String(code).trim()) {
+    return res.status(400).json({ error: 'Invalid email or join code' });
+  }
+  const passwordHash = await bcrypt.hash(String(password), 12);
+  await prisma.user.update({ where: { id: user.id }, data: { passwordHash, isActive: true, joinCode: null, lastLoginAt: new Date() } });
+  const token = signToken(user.id);
+  res.json({ token, user: { id: user.id, email: user.email, firstName: user.firstName, lastName: user.lastName, role: user.role.name } });
 };
 
 export const me = async (req: AuthRequest, res: Response) => {
