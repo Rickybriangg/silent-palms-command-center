@@ -1,0 +1,38 @@
+services:
+  # ── Backend API ──────────────────────────────────────
+  - type: web
+    name: silent-palms-api
+    runtime: node
+    rootDir: backend
+    buildCommand: npm install && npm run build && npx prisma generate --schema ../prisma/schema.prisma
+    startCommand: npx prisma migrate deploy --schema ../prisma/schema.prisma && node dist/index.js
+    healthCheckPath: /health
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: DATABASE_URL
+        fromDatabase:
+          name: silent-palms-db
+          property: connectionString
+      - key: JWT_SECRET
+        generateValue: true
+      - key: FRONTEND_URL
+        sync: false
+      - key: ANTHROPIC_API_KEY
+        sync: false
+
+  # ── Frontend ─────────────────────────────────────────
+  - type: web
+    name: silent-palms-web
+    runtime: node
+    rootDir: frontend
+    buildCommand: npm install --legacy-peer-deps && npm run build
+    startCommand: npm start
+    envVars:
+      - key: NEXT_PUBLIC_API_URL
+        sync: false
+
+databases:
+  - name: silent-palms-db
+    databaseName: silentpalms
+    user: silentpalms
