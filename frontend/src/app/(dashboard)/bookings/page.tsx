@@ -54,17 +54,17 @@ export default function BookingsPage() {
               <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground" />
               <Input placeholder="Search bookings..." className="pl-9 w-64 h-9 text-sm" value={search} onChange={e => setSearch(e.target.value)} />
             </div>
-            <Select value={status} onValueChange={setStatus}>
+            <Select value={status || 'ALL'} onValueChange={v => setStatus(v === 'ALL' ? '' : v)}>
               <SelectTrigger className="w-36 h-9 text-sm"><SelectValue placeholder="All Status" /></SelectTrigger>
               <SelectContent>
-                <SelectItem value="">All Status</SelectItem>
+                <SelectItem value="ALL">All Status</SelectItem>
                 {Object.keys(STATUS_COLORS).map(s => <SelectItem key={s} value={s}>{s}</SelectItem>)}
               </SelectContent>
             </Select>
-            <Select value={channel} onValueChange={setChannel}>
+            <Select value={channel || 'ALL'} onValueChange={v => setChannel(v === 'ALL' ? '' : v)}>
               <SelectTrigger className="w-36 h-9 text-sm"><SelectValue placeholder="All Channels" /></SelectTrigger>
               <SelectContent>
-                <SelectItem value="">All Channels</SelectItem>
+                <SelectItem value="ALL">All Channels</SelectItem>
                 {Object.keys(CHANNEL_ICONS).map(c => <SelectItem key={c} value={c}>{c}</SelectItem>)}
               </SelectContent>
             </Select>
