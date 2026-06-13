@@ -7,7 +7,7 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
-import { Plus, Upload, Instagram, Facebook, X, Loader2 } from 'lucide-react';
+import { Plus, Upload, Instagram, Facebook, X, Loader2, ImagePlus, Pencil } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { toast } from 'sonner';
 import { motion } from 'framer-motion';
@@ -30,7 +30,6 @@ const STATUS_COLOR: Record<string, string> = {
   PUBLISHED: 'bg-emerald-100 text-emerald-700',
 };
 
-// The next workflow action available for a post in a given status
 const NEXT_ACTION: Record<string, { label: string; status: string } | null> = {
   DRAFT: { label: 'Submit for Approval', status: 'PENDING_APPROVAL' },
   PENDING_APPROVAL: { label: 'Approve', status: 'APPROVED' },
@@ -39,23 +38,31 @@ const NEXT_ACTION: Record<string, { label: string; status: string } | null> = {
   PUBLISHED: null,
 };
 
+const MAX_IMG_BYTES = 1.5 * 1024 * 1024;
+const fileToDataUrl = (file: File) =>
+  new Promise<string>((resolve, reject) => {
+    const r = new FileReader();
+    r.onload = () => resolve(r.result as string);
+    r.onerror = reject;
+    r.readAsDataURL(file);
+  });
+
 export default function MarketingPage() {
   const [view, setView] = useState<'campaigns' | 'calendar' | 'posts'>('campaigns');
   const [modal, setModal] = useState<'campaign' | 'post' | null>(null);
+  const [editingPost, setEditingPost] = useState<any | null>(null);
   const qc = useQueryClient();
 
   const { data: campaigns = [] } = useQuery({
     queryKey: ['campaigns'],
     queryFn: () => api.get('/marketing/campaigns').then(r => r.data),
   });
-
   const { data: posts = [] } = useQuery({
     queryKey: ['social-posts'],
     queryFn: () => api.get('/marketing/posts').then(r => r.data),
     enabled: view === 'posts',
   });
 
-  // --- Mutations ---
   const createCampaign = useMutation({
     mutationFn: (data: any) => api.post('/marketing/campaigns', data),
     onSuccess: () => { qc.invalidateQueries({ queryKey: ['campaigns'] }); toast.success('Campaign created'); setModal(null); },
@@ -63,14 +70,21 @@ export default function MarketingPage() {
   });
   const createPost = useMutation({
     mutationFn: (data: any) => api.post('/marketing/posts', data),
-    onSuccess: () => { qc.invalidateQueries({ queryKey: ['social-posts'] }); toast.success('Post created'); setModal(null); setView('posts'); },
+    onSuccess: () => { qc.invalidateQueries({ queryKey: ['social-posts'] }); toast.success('Post created'); closePost(); setView('posts'); },
     onError: (e: any) => toast.error(e?.response?.data?.error ?? 'Failed to create post'),
+  });
+  const updatePost = useMutation({
+    mutationFn: ({ id, data }: { id: string; data: any }) => api.put(`/marketing/posts/${id}`, data),
+    onSuccess: () => { qc.invalidateQueries({ queryKey: ['social-posts'] }); toast.success('Post updated'); closePost(); },
+    onError: (e: any) => toast.error(e?.response?.data?.error ?? 'Failed to update post'),
   });
   const advancePost = useMutation({
     mutationFn: ({ id, status }: { id: string; status: string }) => api.put(`/marketing/posts/${id}`, { status }),
-    onSuccess: () => { qc.invalidateQueries({ queryKey: ['social-posts'] }); toast.success('Post updated'); },
-    onError: () => toast.error('Failed to update post'),
+    onSuccess: (_d, v) => { qc.invalidateQueries({ queryKey: ['social-posts'] }); toast.success(v.status === 'PUBLISHED' ? 'Published to social media' : 'Post updated'); },
+    onError: (e: any) => toast.error(e?.response?.data?.error ?? 'Failed to update post'),
   });
+
+  const closePost = () => { setModal(null); setEditingPost(null); };
 
   const handleBatchUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -91,34 +105,26 @@ export default function MarketingPage() {
       <Header title="Marketing Automation" subtitle="Content calendar, campaigns & social scheduling" />
 
       <div className="p-6 space-y-4">
-        {/* Controls */}
         <div className="flex items-center justify-between">
           <div className="flex gap-1 bg-muted rounded-lg p-1">
             {(['campaigns', 'calendar', 'posts'] as const).map(v => (
-              <button
-                key={v}
-                onClick={() => setView(v)}
-                className={cn('px-3 py-1.5 text-xs font-medium rounded-md capitalize transition-colors', view === v ? 'bg-card shadow text-foreground' : 'text-muted-foreground')}
-              >
+              <button key={v} onClick={() => setView(v)}
+                className={cn('px-3 py-1.5 text-xs font-medium rounded-md capitalize transition-colors', view === v ? 'bg-card shadow text-foreground' : 'text-muted-foreground')}>
                 {v}
               </button>
             ))}
           </div>
-
           <div className="flex gap-2">
             <label className="cursor-pointer">
               <input type="file" accept=".xlsx,.xls,.csv" className="hidden" onChange={handleBatchUpload} />
-              <Button variant="outline" size="sm" className="gap-2" asChild>
-                <span><Upload size={14} /> Batch Upload</span>
-              </Button>
+              <Button variant="outline" size="sm" className="gap-2" asChild><span><Upload size={14} /> Batch Upload</span></Button>
             </label>
-            <Button size="sm" className="gap-2 bg-primary hover:bg-primary/90" onClick={() => setModal(view === 'campaigns' ? 'campaign' : 'post')}>
+            <Button size="sm" className="gap-2 bg-primary hover:bg-primary/90" onClick={() => { setEditingPost(null); setModal(view === 'campaigns' ? 'campaign' : 'post'); }}>
               <Plus size={14} /> {view === 'campaigns' ? 'New Campaign' : 'New Post'}
             </Button>
           </div>
         </div>
 
-        {/* Workflow Banner */}
         <div className="bg-gradient-to-r from-primary/10 to-teal-500/10 border border-primary/20 rounded-xl p-4">
           <h4 className="text-sm font-semibold text-primary mb-2">Content Workflow</h4>
           <div className="flex items-center gap-2 flex-wrap">
@@ -134,9 +140,7 @@ export default function MarketingPage() {
         {view === 'campaigns' && (
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
             {campaigns.map((c: any) => <CampaignCard key={c.id} campaign={c} />)}
-            {campaigns.length === 0 && (
-              <div className="col-span-3 py-16 text-center text-muted-foreground text-sm">No campaigns yet. Create your first campaign.</div>
-            )}
+            {campaigns.length === 0 && <div className="col-span-3 py-16 text-center text-muted-foreground text-sm">No campaigns yet. Create your first campaign.</div>}
           </div>
         )}
 
@@ -146,6 +150,7 @@ export default function MarketingPage() {
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
             {posts.map((post: any) => {
               const tags = Array.isArray(post.hashtags) ? post.hashtags : [];
+              const media = Array.isArray(post.mediaUrls) ? post.mediaUrls : [];
               const next = NEXT_ACTION[post.status];
               return (
                 <motion.div key={post.id} initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} className="bg-card border border-border rounded-xl p-4">
@@ -158,29 +163,32 @@ export default function MarketingPage() {
                     </div>
                     <span className={cn('text-[10px] px-2 py-0.5 rounded-full font-medium', STATUS_COLOR[post.status] ?? 'bg-muted')}>{post.status}</span>
                   </div>
-                  <p className="text-sm text-foreground line-clamp-3 mb-3">{post.caption}</p>
-                  {tags.length > 0 && (
-                    <p className="text-xs text-primary line-clamp-1">{tags.map((h: string) => `#${h}`).join(' ')}</p>
+                  {media.length > 0 && (
+                    <div className="flex gap-1 mb-2 overflow-x-auto">
+                      {media.map((src: string, i: number) => (
+                        // eslint-disable-next-line @next/next/no-img-element
+                        <img key={i} src={src} alt="" className="h-20 w-20 object-cover rounded-md border border-border shrink-0" />
+                      ))}
+                    </div>
                   )}
-                  {post.scheduledAt && (
-                    <p className="text-xs text-muted-foreground mt-2">Scheduled: {new Date(post.scheduledAt).toLocaleString()}</p>
-                  )}
-                  {next && (
-                    <Button
-                      size="sm"
-                      className="w-full text-xs mt-3 bg-primary hover:bg-primary/90"
-                      disabled={advancePost.isPending}
-                      onClick={() => advancePost.mutate({ id: post.id, status: next.status })}
-                    >
-                      {next.label}
+                  <p className="text-sm text-foreground line-clamp-3 mb-2">{post.caption}</p>
+                  {tags.length > 0 && <p className="text-xs text-primary line-clamp-1">{tags.map((h: string) => `#${h}`).join(' ')}</p>}
+                  {post.scheduledAt && <p className="text-xs text-muted-foreground mt-2">Scheduled: {new Date(post.scheduledAt).toLocaleString()}</p>}
+                  <div className="flex gap-2 mt-3">
+                    {next && (
+                      <Button size="sm" className="flex-1 text-xs bg-primary hover:bg-primary/90" disabled={advancePost.isPending}
+                        onClick={() => advancePost.mutate({ id: post.id, status: next.status })}>
+                        {next.label}
+                      </Button>
+                    )}
+                    <Button size="sm" variant="outline" className="text-xs gap-1" onClick={() => { setEditingPost(post); setModal('post'); }}>
+                      <Pencil size={12} /> Edit
                     </Button>
-                  )}
+                  </div>
                 </motion.div>
               );
             })}
-            {posts.length === 0 && (
-              <div className="col-span-3 py-16 text-center text-muted-foreground text-sm">No posts yet. Create your first post.</div>
-            )}
+            {posts.length === 0 && <div className="col-span-3 py-16 text-center text-muted-foreground text-sm">No posts yet. Create your first post.</div>}
           </div>
         )}
       </div>
@@ -189,7 +197,12 @@ export default function MarketingPage() {
         <CampaignModal onClose={() => setModal(null)} onSubmit={(d) => createCampaign.mutate(d)} loading={createCampaign.isPending} />
       )}
       {modal === 'post' && (
-        <PostModal onClose={() => setModal(null)} onSubmit={(d) => createPost.mutate(d)} loading={createPost.isPending} />
+        <PostModal
+          initial={editingPost}
+          onClose={closePost}
+          loading={createPost.isPending || updatePost.isPending}
+          onSubmit={(d) => editingPost ? updatePost.mutate({ id: editingPost.id, data: d }) : createPost.mutate(d)}
+        />
       )}
     </div>
   );
@@ -199,11 +212,8 @@ export default function MarketingPage() {
 function Modal({ title, onClose, children }: { title: string; onClose: () => void; children: React.ReactNode }) {
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4" onClick={onClose}>
-      <motion.div
-        initial={{ opacity: 0, scale: 0.96 }} animate={{ opacity: 1, scale: 1 }}
-        className="bg-card border border-border rounded-xl w-full max-w-md p-6 shadow-xl"
-        onClick={e => e.stopPropagation()}
-      >
+      <motion.div initial={{ opacity: 0, scale: 0.96 }} animate={{ opacity: 1, scale: 1 }}
+        className="bg-card border border-border rounded-xl w-full max-w-md p-6 shadow-xl max-h-[90vh] overflow-y-auto" onClick={e => e.stopPropagation()}>
         <div className="flex items-center justify-between mb-4">
           <h3 className="font-semibold">{title}</h3>
           <button onClick={onClose} className="text-muted-foreground hover:text-foreground"><X size={18} /></button>
@@ -249,11 +259,30 @@ function CampaignModal({ onClose, onSubmit, loading }: { onClose: () => void; on
   );
 }
 
-function PostModal({ onClose, onSubmit, loading }: { onClose: () => void; onSubmit: (d: any) => void; loading: boolean }) {
-  const [form, setForm] = useState({ platform: 'INSTAGRAM', caption: '', hashtags: '', scheduledAt: '', status: 'DRAFT' });
+function PostModal({ initial, onClose, onSubmit, loading }: { initial: any | null; onClose: () => void; onSubmit: (d: any) => void; loading: boolean }) {
+  const [form, setForm] = useState({
+    platform: initial?.platform ?? 'INSTAGRAM',
+    caption: initial?.caption ?? '',
+    hashtags: Array.isArray(initial?.hashtags) ? initial.hashtags.join(', ') : '',
+    scheduledAt: initial?.scheduledAt ? new Date(initial.scheduledAt).toISOString().slice(0, 16) : '',
+    status: initial?.status ?? 'DRAFT',
+  });
+  const [images, setImages] = useState<string[]>(Array.isArray(initial?.mediaUrls) ? initial.mediaUrls : []);
   const set = (k: string, v: string) => setForm(f => ({ ...f, [k]: v }));
+
+  const addImages = async (files: FileList | null) => {
+    if (!files) return;
+    const next: string[] = [];
+    for (const f of Array.from(files)) {
+      if (!f.type.startsWith('image/')) { toast.error('Only image files are allowed'); continue; }
+      if (f.size > MAX_IMG_BYTES) { toast.error(`${f.name} is over 1.5MB`); continue; }
+      next.push(await fileToDataUrl(f));
+    }
+    setImages(prev => [...prev, ...next].slice(0, 4));
+  };
+
   return (
-    <Modal title="New Social Post" onClose={onClose}>
+    <Modal title={initial ? 'Edit Post' : 'New Social Post'} onClose={onClose}>
       <form
         onSubmit={e => {
           e.preventDefault();
@@ -263,7 +292,8 @@ function PostModal({ onClose, onSubmit, loading }: { onClose: () => void; onSubm
             caption: form.caption,
             status: form.status,
             scheduledAt: form.scheduledAt || null,
-            hashtags: form.hashtags.split(',').map(h => h.trim().replace(/^#/, '')).filter(Boolean),
+            mediaUrls: images,
+            hashtags: String(form.hashtags).split(',').map((h: string) => h.trim().replace(/^#/, '')).filter(Boolean),
           });
         }}
         className="space-y-3"
@@ -275,18 +305,40 @@ function PostModal({ onClose, onSubmit, loading }: { onClose: () => void; onSubm
           </select>
         </div>
         <div><Label>Caption</Label><Textarea value={form.caption} onChange={e => set('caption', e.target.value)} placeholder="🌴 Wake up to the Indian Ocean..." rows={3} required /></div>
+
+        {/* Photos */}
+        <div>
+          <Label>Photos (max 4, ≤1.5MB each)</Label>
+          <div className="flex flex-wrap gap-2 mt-1">
+            {images.map((src, i) => (
+              <div key={i} className="relative">
+                {/* eslint-disable-next-line @next/next/no-img-element */}
+                <img src={src} alt="" className="h-16 w-16 object-cover rounded-md border border-border" />
+                <button type="button" onClick={() => setImages(imgs => imgs.filter((_, j) => j !== i))}
+                  className="absolute -top-1.5 -right-1.5 bg-destructive text-white rounded-full w-4 h-4 flex items-center justify-center"><X size={10} /></button>
+              </div>
+            ))}
+            {images.length < 4 && (
+              <label className="h-16 w-16 rounded-md border border-dashed border-border flex items-center justify-center cursor-pointer text-muted-foreground hover:text-foreground">
+                <ImagePlus size={18} />
+                <input type="file" accept="image/*" multiple className="hidden" onChange={e => addImages(e.target.files)} />
+              </label>
+            )}
+          </div>
+        </div>
+
         <div><Label>Hashtags (comma-separated)</Label><Input value={form.hashtags} onChange={e => set('hashtags', e.target.value)} placeholder="DianiBeach, Kenya, BeachVilla" /></div>
         <div className="grid grid-cols-2 gap-3">
           <div><Label>Schedule</Label><Input type="datetime-local" value={form.scheduledAt} onChange={e => set('scheduledAt', e.target.value)} /></div>
           <div>
             <Label>Status</Label>
             <select className="w-full h-9 rounded-md border border-input bg-background px-3 text-sm" value={form.status} onChange={e => set('status', e.target.value)}>
-              {['DRAFT', 'PENDING_APPROVAL', 'SCHEDULED'].map(s => <option key={s} value={s}>{s}</option>)}
+              {['DRAFT', 'PENDING_APPROVAL', 'APPROVED', 'SCHEDULED'].map(s => <option key={s} value={s}>{s}</option>)}
             </select>
           </div>
         </div>
         <Button type="submit" className="w-full bg-primary hover:bg-primary/90" disabled={loading}>
-          {loading ? <Loader2 size={15} className="animate-spin mr-2" /> : null} Create Post
+          {loading ? <Loader2 size={15} className="animate-spin mr-2" /> : null} {initial ? 'Save Changes' : 'Create Post'}
         </Button>
       </form>
     </Modal>

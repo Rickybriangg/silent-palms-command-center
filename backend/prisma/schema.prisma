@@ -10,6 +10,19 @@ datasource db {
   url      = env("DATABASE_URL")
 }
 
+// Stored credentials/handles for publishing to each social platform.
+model SocialAccount {
+  id          String   @id @default(cuid())
+  platform    String   @unique // INSTAGRAM | FACEBOOK | TWITTER | TIKTOK | GOOGLE_BUSINESS
+  handle      String? // @profile or page name
+  profileUrl  String? // public profile/page URL
+  accessToken String? // platform API token (write-only via API; never returned)
+  accountId   String? // page id / account id used by the platform API
+  connected   Boolean  @default(false)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+}
+
 model Role {
   id          String   @id @default(cuid())
   name        String   @unique
