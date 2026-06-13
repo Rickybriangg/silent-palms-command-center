@@ -23,18 +23,52 @@ const upload = multer({
 });
 router.use(authenticate);
 
+// --- helpers: JSON string fields are stored serialized; (de)serialize at the edge ---
+const parseField = (v: any) => {
+  if (typeof v !== 'string') return v;
+  try { return JSON.parse(v); } catch { return v; }
+};
+const serializeField = (v: any) =>
+  v == null ? v : (typeof v === 'string' ? v : JSON.stringify(v));
+
+const hydrateCampaign = (c: any) => ({
+  ...c,
+  targetAudience: parseField(c.targetAudience),
+  goals: parseField(c.goals),
+  metrics: parseField(c.metrics),
+});
+const hydratePost = (p: any) => ({
+  ...p,
+  hashtags: parseField(p.hashtags) ?? [],
+  mediaUrls: parseField(p.mediaUrls) ?? [],
+  metrics: parseField(p.metrics),
+});
+
 // Campaigns
 router.get('/campaigns', async (_req, res) => {
   const campaigns = await prisma.campaign.findMany({
     include: { _count: { select: { socialPosts: true } } },
     orderBy: { createdAt: 'desc' },
   });
-  res.json(campaigns);
+  res.json(campaigns.map(hydrateCampaign));
 });
 
 router.post('/campaigns', async (req, res) => {
-  const campaign = await prisma.campaign.create({ data: req.body });
-  res.status(201).json(campaign);
+  const { name, type, description, status, budget, startDate, endDate, targetAudience, goals } = req.body ?? {};
+  if (!name || !type) return res.status(400).json({ error: 'Name and type are required' });
+  const campaign = await prisma.campaign.create({
+    data: {
+      name, type,
+      description: description || null,
+      status: status || 'DRAFT',
+      budget: budget != null && budget !== '' ? Number(budget) : null,
+      startDate: startDate ? new Date(startDate) : null,
+      endDate: endDate ? new Date(endDate) : null,
+      targetAudience: serializeField(targetAudience),
+      goals: serializeField(goals),
+    },
+  });
+  res.status(201).json(hydrateCampaign(campaign));
 });
 
 router.put('/campaigns/:id', async (req, res) => {
@@ -71,12 +105,38 @@ router.get('/posts', async (req, res) => {
   if (platform) where.platform = platform;
   if (status) where.status = status;
   const posts = await prisma.socialPost.findMany({ where, orderBy: { scheduledAt: 'desc' } });
-  res.json(posts);
+  res.json(posts.map(hydratePost));
 });
 
 router.post('/posts', async (req, res) => {
-  const post = await prisma.socialPost.create({ data: req.body });
-  res.status(201).json(post);
+  const { platform, caption, status, scheduledAt, hashtags, campaignId } = req.body ?? {};
+  if (!platform || !caption) return res.status(400).json({ error: 'Platform and caption are required' });
+  const post = await prisma.socialPost.create({
+    data: {
+      platform, caption,
+      status: status || 'DRAFT',
+      scheduledAt: scheduledAt ? new Date(scheduledAt) : null,
+      hashtags: serializeField(hashtags ?? []),
+      campaignId: campaignId || null,
+    },
+  });
+  res.status(201).json(hydratePost(post));
+});
+
+// Generic status/content update (advance workflow: DRAFT → PENDING_APPROVAL → APPROVED → SCHEDULED → PUBLISHED)
+const POST_STATUSES = ['DRAFT', 'PENDING_APPROVAL', 'APPROVED', 'SCHEDULED', 'PUBLISHED'];
+router.put('/posts/:id', async (req, res) => {
+  const { status, caption } = req.body ?? {};
+  if (status && !POST_STATUSES.includes(status)) return res.status(400).json({ error: 'Invalid status' });
+  const post = await prisma.socialPost.update({
+    where: { id: req.params.id },
+    data: {
+      ...(status ? { status } : {}),
+      ...(caption ? { caption } : {}),
+      ...(status === 'PUBLISHED' ? { publishedAt: new Date() } : {}),
+    },
+  });
+  res.json(hydratePost(post));
 });
 
 router.put('/posts/:id/approve', async (req, res) => {
@@ -84,7 +144,7 @@ router.put('/posts/:id/approve', async (req, res) => {
     where: { id: req.params.id },
     data: { status: 'APPROVED' },
   });
-  res.json(post);
+  res.json(hydratePost(post));
 });
 
 // Bulk upload from Excel
