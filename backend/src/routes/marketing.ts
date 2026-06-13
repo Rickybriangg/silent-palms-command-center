@@ -5,7 +5,22 @@ import multer from 'multer';
 import * as xlsx from 'xlsx';
 
 const router = Router();
-const upload = multer({ storage: multer.memoryStorage() });
+// Cap upload size (5MB) and restrict to spreadsheet types to prevent
+// memory-exhaustion and arbitrary-file uploads.
+const ALLOWED_UPLOAD_MIMES = [
+  'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet', // .xlsx
+  'application/vnd.ms-excel', // .xls
+  'text/csv',
+  'application/csv',
+];
+const upload = multer({
+  storage: multer.memoryStorage(),
+  limits: { fileSize: 5 * 1024 * 1024, files: 1 },
+  fileFilter: (_req, file, cb) => {
+    if (ALLOWED_UPLOAD_MIMES.includes(file.mimetype)) return cb(null, true);
+    cb(new Error('Only Excel/CSV files are allowed'));
+  },
+});
 router.use(authenticate);
 
 // Campaigns
