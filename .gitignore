@@ -50,3 +50,5 @@ backend/node_modules/
 # Uploads / temp
 uploads/
 tmp/
+backend/src/seed-sample.ts
+backend/src/seed-sample2.ts

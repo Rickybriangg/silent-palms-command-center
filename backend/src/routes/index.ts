@@ -11,6 +11,7 @@ import automationRoutes from './automation';
 import analyticsRoutes from './analytics';
 import documentRoutes from './documents';
 import aiRoutes from './ai';
+import userRoutes from './users';
 
 const router = Router();
 
@@ -26,5 +27,6 @@ router.use('/automation', automationRoutes);
 router.use('/analytics', analyticsRoutes);
 router.use('/documents', documentRoutes);
 router.use('/ai', aiRoutes);
+router.use('/users', userRoutes);
 
 export default router;
