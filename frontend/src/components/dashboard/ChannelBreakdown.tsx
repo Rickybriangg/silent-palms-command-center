@@ -3,7 +3,7 @@ import { PieChart, Pie, Cell, Tooltip, Legend, ResponsiveContainer } from 'recha
 
 const COLORS = ['#0F766E', '#14B8A6', '#F59E0B', '#3B82F6', '#EC4899', '#8B5CF6'];
 
-interface Props { data: { channel: string; bookings: number; revenue: number }[] }
+interface Props { data: { channel: string; bookings?: number; revenue?: number }[] }
 
 export function ChannelBreakdown({ data }: Props) {
   return (
@@ -35,8 +35,8 @@ export function ChannelBreakdown({ data }: Props) {
               <span className="text-muted-foreground">{d.channel}</span>
             </div>
             <div className="flex items-center gap-3">
-              <span className="font-medium">{d.bookings} bookings</span>
-              <span className="text-muted-foreground">${d.revenue.toLocaleString()}</span>
+              <span className="font-medium">{d.bookings ?? 0} bookings</span>
+              <span className="text-muted-foreground">${(d.revenue ?? 0).toLocaleString()}</span>
             </div>
           </div>
         ))}

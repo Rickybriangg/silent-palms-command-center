@@ -65,6 +65,7 @@ export const getDashboardStats = async (_req: AuthRequest, res: Response) => {
     by: ['channel'],
     where: { createdAt: { gte: monthStart, lte: monthEnd }, status: { not: 'CANCELLED' } },
     _count: true,
+    _sum: { totalAmount: true },
   });
 
   const totalBookings = channelBreakdown.reduce((sum: number, c) => sum + c._count, 0);
@@ -110,7 +111,11 @@ export const getDashboardStats = async (_req: AuthRequest, res: Response) => {
     activeCampaigns,
     guestSatisfaction: Math.round((reviewStats._avg.rating ?? 0) * 10) / 10,
     totalReviews: reviewStats._count,
-    channelBreakdown,
+    channelBreakdown: channelBreakdown.map((c) => ({
+      channel: c.channel,
+      bookings: c._count,
+      revenue: Number(c._sum?.totalAmount ?? 0),
+    })),
   });
 };
 
