@@ -51,6 +51,7 @@ export default function MarketingPage() {
   const [view, setView] = useState<'campaigns' | 'calendar' | 'posts'>('campaigns');
   const [modal, setModal] = useState<'campaign' | 'post' | null>(null);
   const [editingPost, setEditingPost] = useState<any | null>(null);
+  const [editingCampaign, setEditingCampaign] = useState<any | null>(null);
   const qc = useQueryClient();
 
   const { data: campaigns = [] } = useQuery({
@@ -65,8 +66,13 @@ export default function MarketingPage() {
 
   const createCampaign = useMutation({
     mutationFn: (data: any) => api.post('/marketing/campaigns', data),
-    onSuccess: () => { qc.invalidateQueries({ queryKey: ['campaigns'] }); toast.success('Campaign created'); setModal(null); },
+    onSuccess: () => { qc.invalidateQueries({ queryKey: ['campaigns'] }); toast.success('Campaign created'); closeCampaign(); },
     onError: (e: any) => toast.error(e?.response?.data?.error ?? 'Failed to create campaign'),
+  });
+  const updateCampaign = useMutation({
+    mutationFn: ({ id, data }: { id: string; data: any }) => api.put(`/marketing/campaigns/${id}`, data),
+    onSuccess: () => { qc.invalidateQueries({ queryKey: ['campaigns'] }); toast.success('Campaign updated'); closeCampaign(); },
+    onError: (e: any) => toast.error(e?.response?.data?.error ?? 'Failed to update campaign'),
   });
   const createPost = useMutation({
     mutationFn: (data: any) => api.post('/marketing/posts', data),
@@ -85,6 +91,7 @@ export default function MarketingPage() {
   });
 
   const closePost = () => { setModal(null); setEditingPost(null); };
+  const closeCampaign = () => { setModal(null); setEditingCampaign(null); };
 
   const handleBatchUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -139,7 +146,12 @@ export default function MarketingPage() {
 
         {view === 'campaigns' && (
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-            {campaigns.map((c: any) => <CampaignCard key={c.id} campaign={c} />)}
+            {campaigns.map((c: any) => (
+              <CampaignCard key={c.id} campaign={c}
+                onEdit={(camp) => { setEditingCampaign(camp); setModal('campaign'); }}
+                onViewPosts={() => setView('posts')}
+              />
+            ))}
             {campaigns.length === 0 && <div className="col-span-3 py-16 text-center text-muted-foreground text-sm">No campaigns yet. Create your first campaign.</div>}
           </div>
         )}
@@ -194,7 +206,12 @@ export default function MarketingPage() {
       </div>
 
       {modal === 'campaign' && (
-        <CampaignModal onClose={() => setModal(null)} onSubmit={(d) => createCampaign.mutate(d)} loading={createCampaign.isPending} />
+        <CampaignModal
+          initial={editingCampaign}
+          onClose={closeCampaign}
+          loading={createCampaign.isPending || updateCampaign.isPending}
+          onSubmit={(d) => editingCampaign ? updateCampaign.mutate({ id: editingCampaign.id, data: d }) : createCampaign.mutate(d)}
+        />
       )}
       {modal === 'post' && (
         <PostModal
@@ -224,11 +241,19 @@ function Modal({ title, onClose, children }: { title: string; onClose: () => voi
   );
 }
 
-function CampaignModal({ onClose, onSubmit, loading }: { onClose: () => void; onSubmit: (d: any) => void; loading: boolean }) {
-  const [form, setForm] = useState({ name: '', type: 'SOCIAL', description: '', budget: '', startDate: '', endDate: '', status: 'ACTIVE' });
+function CampaignModal({ initial, onClose, onSubmit, loading }: { initial?: any | null; onClose: () => void; onSubmit: (d: any) => void; loading: boolean }) {
+  const [form, setForm] = useState({
+    name: initial?.name ?? '',
+    type: initial?.type ?? 'SOCIAL',
+    description: initial?.description ?? '',
+    budget: initial?.budget != null ? String(initial.budget) : '',
+    startDate: initial?.startDate ? new Date(initial.startDate).toISOString().slice(0, 10) : '',
+    endDate: initial?.endDate ? new Date(initial.endDate).toISOString().slice(0, 10) : '',
+    status: initial?.status ?? 'ACTIVE',
+  });
   const set = (k: string, v: string) => setForm(f => ({ ...f, [k]: v }));
   return (
-    <Modal title="New Campaign" onClose={onClose}>
+    <Modal title={initial ? 'Edit Campaign' : 'New Campaign'} onClose={onClose}>
       <form onSubmit={e => { e.preventDefault(); if (!form.name) return toast.error('Name is required'); onSubmit(form); }} className="space-y-3">
         <div><Label>Name</Label><Input value={form.name} onChange={e => set('name', e.target.value)} placeholder="Diani Beach Summer Escape" required /></div>
         <div>
@@ -252,7 +277,7 @@ function CampaignModal({ onClose, onSubmit, loading }: { onClose: () => void; on
           <div><Label>End</Label><Input type="date" value={form.endDate} onChange={e => set('endDate', e.target.value)} /></div>
         </div>
         <Button type="submit" className="w-full bg-primary hover:bg-primary/90" disabled={loading}>
-          {loading ? <Loader2 size={15} className="animate-spin mr-2" /> : null} Create Campaign
+          {loading ? <Loader2 size={15} className="animate-spin mr-2" /> : null} {initial ? 'Save Changes' : 'Create Campaign'}
         </Button>
       </form>
     </Modal>

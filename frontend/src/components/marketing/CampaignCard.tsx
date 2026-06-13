@@ -19,7 +19,7 @@ const TYPE_COLOR: Record<string, string> = {
   SEO: 'text-amber-600',
 };
 
-export function CampaignCard({ campaign }: { campaign: any }) {
+export function CampaignCard({ campaign, onEdit, onViewPosts }: { campaign: any; onEdit?: (c: any) => void; onViewPosts?: (c: any) => void }) {
   return (
     <div className="bg-card border border-border rounded-xl p-5 hover:shadow-md transition-shadow">
       <div className="flex items-start justify-between mb-3">
@@ -59,8 +59,8 @@ export function CampaignCard({ campaign }: { campaign: any }) {
       )}
 
       <div className="flex gap-2">
-        <Button size="sm" variant="outline" className="flex-1 text-xs">Edit</Button>
-        <Button size="sm" className="flex-1 text-xs bg-primary hover:bg-primary/90">View Posts</Button>
+        <Button size="sm" variant="outline" className="flex-1 text-xs" onClick={() => onEdit?.(campaign)}>Edit</Button>
+        <Button size="sm" className="flex-1 text-xs bg-primary hover:bg-primary/90" onClick={() => onViewPosts?.(campaign)}>View Posts</Button>
       </div>
     </div>
   );

@@ -7,7 +7,7 @@ import { useAuthStore } from '@/store/authStore';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import { MapPin, User, Palmtree, Bell, Share2, CheckCircle2, Loader2, RefreshCw, Upload, Users } from 'lucide-react';
+import { MapPin, User, Palmtree, Bell, Share2, CheckCircle2, Loader2, RefreshCw, Upload, Users, Globe } from 'lucide-react';
 import { toast } from 'sonner';
 
 const CHANNELS = [
@@ -56,6 +56,8 @@ export default function SettingsPage() {
         </section>
 
         <BookingChannels />
+
+        <WebsiteIntegration />
 
         <ImportContacts />
 
@@ -116,6 +118,48 @@ function BookingChannels() {
             </div>
           );
         })}
+      </div>
+    </section>
+  );
+}
+
+function WebsiteIntegration() {
+  const apiBase = (process.env.NEXT_PUBLIC_API_URL || '').replace(/\/$/, '');
+  const endpoint = `${apiBase}/public/inquiry`;
+  const snippet = `<!-- Silent Palms inquiry form — paste into your website -->
+<form onsubmit="event.preventDefault();fetch('${endpoint}',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(Object.fromEntries(new FormData(this)))}).then(r=>r.json()).then(d=>{alert(d.message||'Thank you!');this.reset();});">
+  <input name="name" placeholder="Your name" required />
+  <input name="phone" placeholder="Phone / WhatsApp" required />
+  <input name="email" type="email" placeholder="Email" />
+  <input name="checkIn" type="date" />
+  <input name="checkOut" type="date" />
+  <textarea name="message" placeholder="Your message"></textarea>
+  <button type="submit">Send Inquiry</button>
+</form>`;
+  const copy = (text: string) => { navigator.clipboard.writeText(text).then(() => toast.success('Copied to clipboard')); };
+
+  return (
+    <section className="bg-card border border-border rounded-xl p-6">
+      <div className="flex items-center gap-2 mb-1"><Globe size={16} className="text-primary" /><h3 className="font-semibold">Website Integration</h3></div>
+      <p className="text-xs text-muted-foreground mb-4">
+        Connect your existing website so inquiries land in the CRM automatically (as WhatsApp/marketing leads).
+      </p>
+      <div className="space-y-3">
+        <div>
+          <label className="text-xs text-muted-foreground">Inquiry API endpoint (POST)</label>
+          <div className="flex gap-2 mt-1">
+            <Input className="h-8 text-xs font-mono" readOnly value={endpoint} />
+            <Button size="sm" variant="outline" className="text-xs" onClick={() => copy(endpoint)}>Copy</Button>
+          </div>
+        </div>
+        <div>
+          <label className="text-xs text-muted-foreground">Embeddable form (paste into your site)</label>
+          <textarea readOnly value={snippet} rows={6} className="w-full mt-1 rounded-md border border-input bg-background p-2 text-[11px] font-mono" />
+          <Button size="sm" variant="outline" className="text-xs mt-1" onClick={() => copy(snippet)}>Copy Form Code</Button>
+        </div>
+        <p className="text-[11px] text-muted-foreground">
+          Tip: if your site is on WordPress/Wix/Squarespace, paste this into a Custom HTML / Embed block. Submissions appear under WhatsApp CRM → Conversations.
+        </p>
       </div>
     </section>
   );

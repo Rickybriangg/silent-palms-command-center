@@ -6,7 +6,7 @@ import { Header } from '@/components/layout/Header';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import { Mail, Phone, CheckCircle2, XCircle, UserPlus, X, Loader2 } from 'lucide-react';
+import { Mail, Phone, CheckCircle2, XCircle, UserPlus, X, Loader2, Trash2 } from 'lucide-react';
 import { toast } from 'sonner';
 import { motion } from 'framer-motion';
 
@@ -26,10 +26,22 @@ export default function TeamPage() {
     queryFn: () => api.get('/users').then(r => r.data),
   });
 
+  const { data: roles = [] } = useQuery({ queryKey: ['roles'], queryFn: () => api.get('/users/roles').then(r => r.data) });
+
   const addStaff = useMutation({
     mutationFn: (data: any) => api.post('/auth/register', data),
     onSuccess: () => { qc.invalidateQueries({ queryKey: ['team'] }); toast.success('Staff member added'); setShowAdd(false); },
     onError: (e: any) => toast.error(e?.response?.data?.error ?? 'Failed to add staff'),
+  });
+  const updateStaff = useMutation({
+    mutationFn: ({ id, data }: { id: string; data: any }) => api.put(`/users/${id}`, data),
+    onSuccess: () => { qc.invalidateQueries({ queryKey: ['team'] }); toast.success('Staff updated'); },
+    onError: (e: any) => toast.error(e?.response?.data?.error ?? 'Update failed'),
+  });
+  const removeStaff = useMutation({
+    mutationFn: (id: string) => api.delete(`/users/${id}`),
+    onSuccess: () => { qc.invalidateQueries({ queryKey: ['team'] }); toast.success('Staff removed'); },
+    onError: (e: any) => toast.error(e?.response?.data?.error ?? 'Remove failed'),
   });
 
   return (
@@ -69,6 +81,30 @@ export default function TeamPage() {
                     {m.isActive
                       ? <><CheckCircle2 size={12} className="text-emerald-500" /> Active</>
                       : <><XCircle size={12} className="text-red-500" /> Inactive</>}
+                  </div>
+                </div>
+
+                {/* Manage rights (admin) */}
+                <div className="mt-3 pt-3 border-t border-border/50 space-y-2">
+                  <div>
+                    <label className="text-[10px] text-muted-foreground">Role / rights</label>
+                    <select
+                      className="w-full h-8 rounded-md border border-input bg-background px-2 text-xs mt-0.5"
+                      value={roles.find((r: any) => r.name === m.role?.name)?.id ?? ''}
+                      onChange={e => updateStaff.mutate({ id: m.id, data: { roleId: e.target.value } })}
+                    >
+                      {roles.map((r: any) => <option key={r.id} value={r.id}>{r.name.replace(/_/g, ' ')}</option>)}
+                    </select>
+                  </div>
+                  <div className="flex gap-2">
+                    <Button size="sm" variant="outline" className="flex-1 h-7 text-[11px]"
+                      onClick={() => updateStaff.mutate({ id: m.id, data: { isActive: !m.isActive } })}>
+                      {m.isActive ? 'Deactivate' : 'Activate'}
+                    </Button>
+                    <Button size="sm" variant="outline" className="h-7 text-[11px] text-red-600 hover:text-red-700 gap-1"
+                      onClick={() => { if (confirm(`Remove ${m.firstName} ${m.lastName}?`)) removeStaff.mutate(m.id); }}>
+                      <Trash2 size={12} /> Remove
+                    </Button>
                   </div>
                 </div>
               </div>

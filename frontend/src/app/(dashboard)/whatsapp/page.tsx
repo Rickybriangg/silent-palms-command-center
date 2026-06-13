@@ -31,7 +31,14 @@ export default function WhatsAppPage() {
   const [search, setSearch] = useState('');
   const [message, setMessage] = useState('');
   const [templateModal, setTemplateModal] = useState<{ mode: 'new' | 'edit'; template?: any } | null>(null);
+  const [showProfile, setShowProfile] = useState(false);
   const qc = useQueryClient();
+
+  const labelMutation = useMutation({
+    mutationFn: ({ guestId, label }: { guestId: string; label: string }) => api.post(`/guests/${guestId}/labels`, { label }),
+    onSuccess: () => { qc.invalidateQueries({ queryKey: ['whatsapp-conversations'] }); toast.success('Label added'); },
+    onError: () => toast.error('Failed to add label'),
+  });
 
   const { data: conversations = [] } = useQuery({
     queryKey: ['whatsapp-conversations', search],
@@ -153,9 +160,14 @@ export default function WhatsAppPage() {
                     {selectedGuest.labels?.map((l: any) => (
                       <Badge key={l.id} variant="outline" className="text-xs">{l.label}</Badge>
                     ))}
-                    <Button variant="ghost" size="icon" className="h-8 w-8"><Tag size={14} /></Button>
-                    <Button variant="ghost" size="icon" className="h-8 w-8"><User size={14} /></Button>
-                    <Button variant="ghost" size="icon" className="h-8 w-8"><Phone size={14} /></Button>
+                    <Button variant="ghost" size="icon" className="h-8 w-8" title="Add label" onClick={() => {
+                      const label = window.prompt('Add a label for this guest (e.g. VIP, Honeymoon):');
+                      if (label) labelMutation.mutate({ guestId: selectedGuest.id, label });
+                    }}><Tag size={14} /></Button>
+                    <Button variant="ghost" size="icon" className="h-8 w-8" title="Guest profile" onClick={() => setShowProfile(true)}><User size={14} /></Button>
+                    <a href={`tel:${selectedGuest.phone}`} title="Call guest">
+                      <Button variant="ghost" size="icon" className="h-8 w-8"><Phone size={14} /></Button>
+                    </a>
                   </div>
                 </div>
 
@@ -290,6 +302,42 @@ export default function WhatsAppPage() {
           onClose={() => setTemplateModal(null)}
           onSubmit={(data) => saveTemplate.mutate({ mode: templateModal.mode, id: templateModal.template?.id, data })}
         />
+      )}
+
+      {showProfile && selectedGuest && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4" onClick={() => setShowProfile(false)}>
+          <motion.div initial={{ opacity: 0, scale: 0.96 }} animate={{ opacity: 1, scale: 1 }}
+            className="bg-card border border-border rounded-xl w-full max-w-sm p-6 shadow-xl" onClick={e => e.stopPropagation()}>
+            <div className="flex items-center justify-between mb-4">
+              <h3 className="font-semibold">Guest Profile</h3>
+              <button onClick={() => setShowProfile(false)} className="text-muted-foreground hover:text-foreground"><X size={18} /></button>
+            </div>
+            <div className="flex items-center gap-3 mb-4">
+              <div className="w-14 h-14 rounded-full bg-primary/10 text-primary text-lg font-bold flex items-center justify-center">
+                {selectedGuest.firstName?.[0]}{selectedGuest.lastName?.[0]}
+              </div>
+              <div>
+                <p className="font-semibold">{selectedGuest.firstName} {selectedGuest.lastName}</p>
+                <p className="text-xs text-muted-foreground">{selectedGuest.phone}</p>
+              </div>
+            </div>
+            <div className="space-y-1.5 text-sm">
+              {selectedGuest.email && <div className="flex justify-between"><span className="text-muted-foreground">Email</span><span>{selectedGuest.email}</span></div>}
+              {selectedGuest.nationality && <div className="flex justify-between"><span className="text-muted-foreground">Nationality</span><span>{selectedGuest.nationality}</span></div>}
+              <div className="flex justify-between"><span className="text-muted-foreground">Bookings</span><span>{selectedGuest.totalBookings ?? 0}</span></div>
+              <div className="flex justify-between"><span className="text-muted-foreground">VIP</span><span>{selectedGuest.isVip ? 'Yes ⭐' : 'No'}</span></div>
+              {selectedGuest.labels?.length > 0 && (
+                <div className="flex flex-wrap gap-1 pt-2">
+                  {selectedGuest.labels.map((l: any) => <Badge key={l.id} variant="outline" className="text-[10px]">{l.label}</Badge>)}
+                </div>
+              )}
+            </div>
+            <div className="grid grid-cols-2 gap-2 mt-4">
+              <a href={`tel:${selectedGuest.phone}`}><Button variant="outline" className="w-full gap-1"><Phone size={14} /> Call</Button></a>
+              <Button className="bg-primary hover:bg-primary/90 gap-1" onClick={() => setShowProfile(false)}>Close</Button>
+            </div>
+          </motion.div>
+        </div>
       )}
     </div>
   );

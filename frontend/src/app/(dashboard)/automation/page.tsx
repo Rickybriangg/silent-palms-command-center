@@ -7,7 +7,7 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
-import { Zap, Plus, ChevronRight, Clock, BarChart2, X, Loader2 } from 'lucide-react';
+import { Zap, Plus, ChevronRight, Clock, BarChart2, X, Loader2, Play } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { toast } from 'sonner';
 import { motion } from 'framer-motion';
@@ -42,6 +42,12 @@ export default function AutomationPage() {
     mutationFn: (data: any) => api.post('/automation', data),
     onSuccess: () => { qc.invalidateQueries({ queryKey: ['workflows'] }); toast.success('Workflow created'); setShowNew(false); },
     onError: (e: any) => toast.error(e?.response?.data?.error ?? 'Failed to create workflow'),
+  });
+
+  const runMutation = useMutation({
+    mutationFn: (id: string) => api.post(`/automation/${id}/run`),
+    onSuccess: (r) => { qc.invalidateQueries({ queryKey: ['workflows'] }); toast.success(r.data?.message ?? 'Workflow ran'); },
+    onError: (e: any) => toast.error(e?.response?.data?.error ?? 'Failed to run workflow'),
   });
 
   const toggleMutation = useMutation({
@@ -97,8 +103,12 @@ export default function AutomationPage() {
                   <div className="text-xs text-muted-foreground flex items-center gap-1">
                     <BarChart2 size={12} /> {w.runCount} runs
                   </div>
+                  <Button size="sm" variant="outline" className="h-7 text-xs gap-1" disabled={runMutation.isPending} onClick={() => runMutation.mutate(w.id)}>
+                    <Play size={11} /> Run
+                  </Button>
                   <button
                     onClick={() => toggleMutation.mutate(w.id)}
+                    title={w.isActive ? 'Active' : 'Paused'}
                     className={cn('relative w-10 h-5 rounded-full transition-colors', w.isActive ? 'bg-primary' : 'bg-muted')}
                   >
                     <div className={cn('absolute top-0.5 w-4 h-4 bg-white rounded-full shadow transition-transform', w.isActive ? 'translate-x-5' : 'translate-x-0.5')} />

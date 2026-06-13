@@ -242,30 +242,73 @@ function NewBookingModal({ onClose, onSubmit, loading }: { onClose: () => void; 
 
 function generateInvoice(booking: any) {
   const g = booking.guest ?? {};
+  const cur = booking.currency ?? 'USD';
   const total = Number(booking.totalAmount ?? 0);
   const base = Number(booking.baseAmount ?? 0);
   const tax = Number(booking.taxAmount ?? 0);
   const paid = Number(booking.paidAmount ?? 0);
-  const html = `<!doctype html><html><head><title>Invoice ${booking.referenceNumber}</title>
-  <style>body{font-family:Arial,sans-serif;color:#0f172a;max-width:720px;margin:40px auto;padding:0 24px}
-  h1{color:#0f766e;margin:0} .muted{color:#64748b;font-size:13px} table{width:100%;border-collapse:collapse;margin-top:24px}
-  th,td{text-align:left;padding:10px;border-bottom:1px solid #e2e8f0;font-size:14px} th{background:#f1f5f9}
-  .right{text-align:right} .total{font-weight:bold;font-size:16px;color:#0f766e}
-  .head{display:flex;justify-content:space-between;align-items:flex-start;border-bottom:3px solid #0f766e;padding-bottom:16px}</style></head>
+  const nights = booking.nights || 1;
+  const rate = base && nights ? Math.round(base / nights) : (booking.unit?.basePrice ?? 0);
+  const money = (n: number) => `${cur} ${Number(n).toLocaleString(undefined, { minimumFractionDigits: 2 })}`;
+  const fmt = (d: any) => d ? new Date(d).toLocaleDateString('en-GB', { day: 'numeric', month: 'long', year: 'numeric' }) : '—';
+
+  const html = `<!doctype html><html><head><meta charset="utf-8"><title>Invoice ${booking.referenceNumber}</title>
+  <style>
+    *{box-sizing:border-box}
+    body{font-family:'Book Antiqua','Palatino Linotype',Georgia,serif;color:#1f2937;max-width:760px;margin:0 auto;padding:48px 40px;line-height:1.5}
+    .top{display:flex;justify-content:space-between;align-items:flex-start;border-bottom:2px solid #0f766e;padding-bottom:18px}
+    .brand{font-size:26px;font-weight:bold;color:#0f766e;letter-spacing:.5px}
+    .brand small{display:block;font-size:12px;color:#6b7280;font-weight:normal;letter-spacing:2px;text-transform:uppercase}
+    .muted{color:#6b7280;font-size:13px}
+    .inv-title{font-size:22px;letter-spacing:3px;color:#0f766e;text-align:right}
+    .meta{display:flex;justify-content:space-between;margin-top:24px;font-size:14px}
+    table{width:100%;border-collapse:collapse;margin-top:22px;font-size:14px}
+    th{background:#0f766e;color:#fff;text-align:left;padding:10px 12px;font-weight:normal}
+    td{padding:10px 12px;border-bottom:1px solid #e5e7eb}
+    .right{text-align:right}
+    .totals{margin-top:14px;margin-left:auto;width:300px;font-size:14px}
+    .totals div{display:flex;justify-content:space-between;padding:5px 0}
+    .totals .grand{border-top:2px solid #0f766e;margin-top:6px;padding-top:10px;font-size:17px;font-weight:bold;color:#0f766e}
+    .totals .due{color:#b91c1c;font-weight:bold}
+    .pay{margin-top:30px;background:#f0fdfa;border:1px solid #99f6e4;border-radius:8px;padding:14px 18px;font-size:13px}
+    .foot{margin-top:36px;text-align:center;color:#6b7280;font-size:12px;border-top:1px solid #e5e7eb;padding-top:16px}
+    @media print{body{padding:24px}}
+  </style></head>
   <body>
-    <div class="head"><div><h1>Silent Palms Villa</h1><p class="muted">Diani Beach, Kenya</p></div>
-    <div class="right"><h2 style="margin:0">INVOICE</h2><p class="muted">${booking.referenceNumber}<br>${new Date().toLocaleDateString()}</p></div></div>
-    <p style="margin-top:20px"><strong>Bill To:</strong><br>${g.firstName ?? ''} ${g.lastName ?? ''}<br>${g.phone ?? ''}<br>${g.email ?? ''}</p>
+    <div class="top">
+      <div><div class="brand">Silent Palms Villa<small>Command Center</small></div>
+      <div class="muted" style="margin-top:8px">Diani Beach Road<br>Diani Beach, Kenya<br>reservations@silentpalms.com</div></div>
+      <div><div class="inv-title">INVOICE</div>
+      <div class="muted right" style="margin-top:8px">No. ${booking.referenceNumber}<br>Date: ${fmt(new Date())}<br>Status: ${booking.status}</div></div>
+    </div>
+
+    <div class="meta">
+      <div><strong>Billed To</strong><br>${g.firstName ?? ''} ${g.lastName ?? ''}<br>${g.phone ?? ''}<br>${g.email ?? ''}${g.nationality ? `<br>${g.nationality}` : ''}</div>
+      <div class="right"><strong>Stay Details</strong><br>${booking.unit?.name ?? 'Accommodation'}<br>Check-in: ${fmt(booking.checkIn)}<br>Check-out: ${fmt(booking.checkOut)}<br>Guests: ${booking.adults ?? 1} adult(s)</div>
+    </div>
+
     <table>
-      <tr><th>Description</th><th class="right">Details</th></tr>
-      <tr><td>${booking.unit?.name ?? 'Accommodation'}</td><td class="right">${new Date(booking.checkIn).toLocaleDateString()} → ${new Date(booking.checkOut).toLocaleDateString()} (${booking.nights} nights)</td></tr>
-      <tr><td>Accommodation</td><td class="right">$${base.toLocaleString()}</td></tr>
-      <tr><td>Tax (16%)</td><td class="right">$${tax.toLocaleString()}</td></tr>
-      <tr><td class="total">Total</td><td class="right total">${booking.currency ?? 'USD'} $${total.toLocaleString()}</td></tr>
-      <tr><td>Paid</td><td class="right">$${paid.toLocaleString()}</td></tr>
-      <tr><td><strong>Balance Due</strong></td><td class="right"><strong>$${(total - paid).toLocaleString()}</strong></td></tr>
+      <thead><tr><th>Description</th><th class="right">Nights</th><th class="right">Rate</th><th class="right">Amount</th></tr></thead>
+      <tbody>
+        <tr><td>${booking.unit?.name ?? 'Villa'} — accommodation</td><td class="right">${nights}</td><td class="right">${money(rate)}</td><td class="right">${money(base)}</td></tr>
+      </tbody>
     </table>
-    <p class="muted" style="margin-top:32px">Thank you for choosing Silent Palms Villa. Karibu Diani! 🌴</p>
+
+    <div class="totals">
+      <div><span>Subtotal</span><span>${money(base)}</span></div>
+      <div><span>Tax (16% VAT)</span><span>${money(tax)}</span></div>
+      <div class="grand"><span>Total</span><span>${money(total)}</span></div>
+      <div><span>Paid</span><span>${money(paid)}</span></div>
+      <div class="due"><span>Balance Due</span><span>${money(total - paid)}</span></div>
+    </div>
+
+    <div class="pay">
+      <strong>Payment Instructions</strong><br>
+      Bank transfer or M-Pesa accepted. Please use invoice number <strong>${booking.referenceNumber}</strong> as the reference.
+      Kindly settle the balance before check-in to secure your reservation.
+    </div>
+
+    <div class="foot">Thank you for choosing Silent Palms Villa — Karibu Diani! 🌴<br>This is a computer-generated invoice.</div>
     <script>window.onload=()=>window.print()</script>
   </body></html>`;
   const w = window.open('', '_blank');
