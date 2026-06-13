@@ -240,7 +240,49 @@ function NewBookingModal({ onClose, onSubmit, loading }: { onClose: () => void; 
   );
 }
 
+function generateInvoice(booking: any) {
+  const g = booking.guest ?? {};
+  const total = Number(booking.totalAmount ?? 0);
+  const base = Number(booking.baseAmount ?? 0);
+  const tax = Number(booking.taxAmount ?? 0);
+  const paid = Number(booking.paidAmount ?? 0);
+  const html = `<!doctype html><html><head><title>Invoice ${booking.referenceNumber}</title>
+  <style>body{font-family:Arial,sans-serif;color:#0f172a;max-width:720px;margin:40px auto;padding:0 24px}
+  h1{color:#0f766e;margin:0} .muted{color:#64748b;font-size:13px} table{width:100%;border-collapse:collapse;margin-top:24px}
+  th,td{text-align:left;padding:10px;border-bottom:1px solid #e2e8f0;font-size:14px} th{background:#f1f5f9}
+  .right{text-align:right} .total{font-weight:bold;font-size:16px;color:#0f766e}
+  .head{display:flex;justify-content:space-between;align-items:flex-start;border-bottom:3px solid #0f766e;padding-bottom:16px}</style></head>
+  <body>
+    <div class="head"><div><h1>Silent Palms Villa</h1><p class="muted">Diani Beach, Kenya</p></div>
+    <div class="right"><h2 style="margin:0">INVOICE</h2><p class="muted">${booking.referenceNumber}<br>${new Date().toLocaleDateString()}</p></div></div>
+    <p style="margin-top:20px"><strong>Bill To:</strong><br>${g.firstName ?? ''} ${g.lastName ?? ''}<br>${g.phone ?? ''}<br>${g.email ?? ''}</p>
+    <table>
+      <tr><th>Description</th><th class="right">Details</th></tr>
+      <tr><td>${booking.unit?.name ?? 'Accommodation'}</td><td class="right">${new Date(booking.checkIn).toLocaleDateString()} → ${new Date(booking.checkOut).toLocaleDateString()} (${booking.nights} nights)</td></tr>
+      <tr><td>Accommodation</td><td class="right">$${base.toLocaleString()}</td></tr>
+      <tr><td>Tax (16%)</td><td class="right">$${tax.toLocaleString()}</td></tr>
+      <tr><td class="total">Total</td><td class="right total">${booking.currency ?? 'USD'} $${total.toLocaleString()}</td></tr>
+      <tr><td>Paid</td><td class="right">$${paid.toLocaleString()}</td></tr>
+      <tr><td><strong>Balance Due</strong></td><td class="right"><strong>$${(total - paid).toLocaleString()}</strong></td></tr>
+    </table>
+    <p class="muted" style="margin-top:32px">Thank you for choosing Silent Palms Villa. Karibu Diani! 🌴</p>
+    <script>window.onload=()=>window.print()</script>
+  </body></html>`;
+  const w = window.open('', '_blank');
+  if (w) { w.document.write(html); w.document.close(); }
+  else toast.error('Allow pop-ups to generate the invoice');
+}
+
 function ViewBookingModal({ booking, onClose }: { booking: any; onClose: () => void }) {
+  const qc = useQueryClient();
+  const confirm = useMutation({
+    mutationFn: () => api.post(`/bookings/${booking.id}/confirm`),
+    onSuccess: (r) => {
+      qc.invalidateQueries({ queryKey: ['bookings'] });
+      r.data?.delivered ? toast.success('Confirmation sent via WhatsApp') : toast.warning(r.data?.note ?? 'Marked confirmed (WhatsApp not connected)', { duration: 6000 });
+    },
+    onError: (e: any) => toast.error(e?.response?.data?.error ?? 'Failed'),
+  });
   const row = (label: string, value: any) => (
     <div className="flex justify-between py-1.5 border-b border-border/50 text-sm">
       <span className="text-muted-foreground">{label}</span>
@@ -262,7 +304,12 @@ function ViewBookingModal({ booking, onClose }: { booking: any; onClose: () => v
         {row('Total', `$${Number(booking.totalAmount ?? 0).toLocaleString()}`)}
         {row('Paid', `$${Number(booking.paidAmount ?? 0).toLocaleString()}`)}
       </div>
-      <Button className="w-full mt-4" variant="outline" onClick={onClose}>Close</Button>
+      <div className="grid grid-cols-2 gap-2 mt-4">
+        <Button variant="outline" onClick={() => generateInvoice(booking)}>Generate Invoice</Button>
+        <Button className="bg-primary hover:bg-primary/90" disabled={confirm.isPending} onClick={() => confirm.mutate()}>
+          {confirm.isPending ? <Loader2 size={15} className="animate-spin mr-2" /> : null} Send Confirmation
+        </Button>
+      </div>
     </ModalShell>
   );
 }

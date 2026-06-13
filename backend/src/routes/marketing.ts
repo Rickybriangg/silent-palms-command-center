@@ -196,7 +196,11 @@ router.post('/upload-batch', upload.single('file'), async (req, res) => {
 });
 
 // --- Social Accounts (credentials for auto-publishing) ---
-const SOCIAL_PLATFORMS = ['INSTAGRAM', 'FACEBOOK', 'TWITTER', 'TIKTOK', 'GOOGLE_BUSINESS', 'WHATSAPP'];
+const SOCIAL_PLATFORMS = [
+  'INSTAGRAM', 'FACEBOOK', 'TWITTER', 'TIKTOK', 'GOOGLE_BUSINESS', 'WHATSAPP',
+  // Booking channel iCal feeds (profileUrl holds the iCal URL)
+  'CHANNEL_AIRBNB', 'CHANNEL_BOOKING', 'CHANNEL_EXPEDIA', 'CHANNEL_VRBO',
+];
 
 // List connection status for every platform. Never returns the access token.
 router.get('/social-accounts', async (_req, res) => {

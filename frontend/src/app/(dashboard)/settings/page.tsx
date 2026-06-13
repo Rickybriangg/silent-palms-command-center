@@ -7,8 +7,15 @@ import { useAuthStore } from '@/store/authStore';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import { MapPin, User, Palmtree, Bell, Share2, CheckCircle2, Loader2 } from 'lucide-react';
+import { MapPin, User, Palmtree, Bell, Share2, CheckCircle2, Loader2, RefreshCw, Upload, Users } from 'lucide-react';
 import { toast } from 'sonner';
+
+const CHANNELS = [
+  { key: 'CHANNEL_AIRBNB', label: 'Airbnb' },
+  { key: 'CHANNEL_BOOKING', label: 'Booking.com' },
+  { key: 'CHANNEL_EXPEDIA', label: 'Expedia' },
+  { key: 'CHANNEL_VRBO', label: 'VRBO' },
+];
 
 const PLATFORMS = [
   { key: 'FACEBOOK', label: 'Facebook', needsAccountId: true, accountIdLabel: 'Page ID', tokenHint: 'Page Access Token (Graph API)', supported: true },
@@ -48,6 +55,10 @@ export default function SettingsPage() {
           </div>
         </section>
 
+        <BookingChannels />
+
+        <ImportContacts />
+
         <SocialAccounts />
 
         <section className="bg-card border border-border rounded-xl p-6">
@@ -64,6 +75,80 @@ export default function SettingsPage() {
         </section>
       </div>
     </div>
+  );
+}
+
+function BookingChannels() {
+  const qc = useQueryClient();
+  const { data: accounts = [] } = useQuery({ queryKey: ['social-accounts'], queryFn: () => api.get('/marketing/social-accounts').then(r => r.data) });
+  const [urls, setUrls] = useState<Record<string, string>>({});
+
+  const save = useMutation({
+    mutationFn: ({ key, url }: { key: string; url: string }) =>
+      api.put(`/marketing/social-accounts/${key}`, { profileUrl: url, connected: !!url }),
+    onSuccess: () => { toast.success('Channel saved'); qc.invalidateQueries({ queryKey: ['social-accounts'] }); },
+    onError: () => toast.error('Save failed'),
+  });
+  const sync = useMutation({
+    mutationFn: () => api.post('/bookings/sync-ical'),
+    onSuccess: (r) => toast.success(r.data?.message ?? 'Synced'),
+    onError: (e: any) => toast.error(e?.response?.data?.error ?? 'Sync failed'),
+  });
+
+  return (
+    <section className="bg-card border border-border rounded-xl p-6">
+      <div className="flex items-center justify-between mb-1">
+        <div className="flex items-center gap-2"><RefreshCw size={16} className="text-primary" /><h3 className="font-semibold">Booking Channels</h3></div>
+        <Button size="sm" variant="outline" className="text-xs gap-1" disabled={sync.isPending} onClick={() => sync.mutate()}>
+          {sync.isPending ? <Loader2 size={12} className="animate-spin" /> : <RefreshCw size={12} />} Sync Now
+        </Button>
+      </div>
+      <p className="text-xs text-muted-foreground mb-4">Paste each platform's iCal export URL to pull in reservations. Then click Sync Now (or it can be scheduled).</p>
+      <div className="space-y-3">
+        {CHANNELS.map(c => {
+          const acct = accounts.find((a: any) => a.platform === c.key);
+          const val = urls[c.key] ?? acct?.profileUrl ?? '';
+          return (
+            <div key={c.key} className="flex items-center gap-2">
+              <span className="text-sm font-medium w-28 shrink-0">{c.label}{acct?.connected && <CheckCircle2 size={12} className="inline ml-1 text-emerald-500" />}</span>
+              <Input className="h-8 text-sm flex-1" value={val} placeholder="https://…/calendar.ics" onChange={e => setUrls(u => ({ ...u, [c.key]: e.target.value }))} />
+              <Button size="sm" className="text-xs bg-primary hover:bg-primary/90" disabled={save.isPending} onClick={() => save.mutate({ key: c.key, url: val })}>Save</Button>
+            </div>
+          );
+        })}
+      </div>
+    </section>
+  );
+}
+
+function ImportContacts() {
+  const qc = useQueryClient();
+  const [busy, setBusy] = useState(false);
+  const onFile = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    setBusy(true);
+    const fd = new FormData();
+    fd.append('file', file);
+    try {
+      const r = await api.post('/guests/import', fd, { headers: { 'Content-Type': 'multipart/form-data' } });
+      toast.success(r.data?.message ?? 'Imported');
+      qc.invalidateQueries({ queryKey: ['whatsapp-conversations'] });
+    } catch (err: any) {
+      toast.error(err?.response?.data?.error ?? 'Import failed');
+    } finally { setBusy(false); e.target.value = ''; }
+  };
+  return (
+    <section className="bg-card border border-border rounded-xl p-6">
+      <div className="flex items-center gap-2 mb-1"><Users size={16} className="text-primary" /><h3 className="font-semibold">Import Marketing Contacts</h3></div>
+      <p className="text-xs text-muted-foreground mb-4">Upload an Excel/CSV of clients (columns: firstName, lastName, phone, email). They're added as guests/leads for marketing & WhatsApp.</p>
+      <label className="cursor-pointer inline-flex">
+        <input type="file" accept=".xlsx,.xls,.csv" className="hidden" onChange={onFile} />
+        <Button size="sm" className="gap-2 bg-primary hover:bg-primary/90" disabled={busy} asChild>
+          <span>{busy ? <Loader2 size={14} className="animate-spin" /> : <Upload size={14} />} Upload Contacts File</span>
+        </Button>
+      </label>
+    </section>
   );
 }
 
