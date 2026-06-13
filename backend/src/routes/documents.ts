@@ -112,7 +112,8 @@ router.post('/generate', async (req: AuthRequest, res: Response) => {
       xlsx.utils.book_append_sheet(wb, xlsx.utils.json_to_sheet([k]), 'KPIs');
     } else {
       const { rows } = await gather(type, range);
-      xlsx.utils.book_append_sheet(wb, xlsx.utils.json_to_sheet(rows.length ? rows : [{ Note: 'No data for this period' }]), title.slice(0, 28));
+      const sheetName = title.replace(/[:\\/?*[\]]/g, ' ').slice(0, 28);
+      xlsx.utils.book_append_sheet(wb, xlsx.utils.json_to_sheet(rows.length ? rows : [{ Note: 'No data for this period' }]), sheetName);
     }
     const buffer = xlsx.write(wb, { type: 'buffer', bookType: 'xlsx' });
     res.setHeader('Content-Disposition', `attachment; filename=${fname}.xlsx`);
