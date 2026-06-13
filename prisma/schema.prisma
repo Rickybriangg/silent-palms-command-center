@@ -1,12 +1,11 @@
-// Silent Palms Command Center — SQLite schema (dev)
-// Switch provider to "postgresql" + restore @db.Decimal for production
+// Silent Palms Command Center — PostgreSQL schema
 
 generator client {
   provider = "prisma-client-js"
 }
 
 datasource db {
-  provider = "sqlite"
+  provider = "postgresql"
   url      = env("DATABASE_URL")
 }
 
