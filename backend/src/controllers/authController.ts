@@ -34,8 +34,7 @@ export const register = async (req: Request, res: Response) => {
 export const me = async (req: AuthRequest, res: Response) => {
   const user = await prisma.user.findUnique({
     where: { id: req.user!.id },
-    include: { role: true },
-    omit: { passwordHash: true },
+    select: { id: true, email: true, firstName: true, lastName: true, avatar: true, phone: true, isActive: true, lastLoginAt: true, createdAt: true, updatedAt: true, roleId: true, role: true },
   });
   res.json(user);
 };

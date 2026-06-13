@@ -23,7 +23,7 @@ export const authenticate = async (req: AuthRequest, res: Response, next: NextFu
       id: user.id,
       email: user.email,
       role: user.role.name,
-      permissions: user.role.permissions as Record<string, boolean>,
+      permissions: (typeof user.role.permissions === 'string' ? JSON.parse(user.role.permissions) : user.role.permissions) as Record<string, boolean>,
     };
     next();
   } catch {

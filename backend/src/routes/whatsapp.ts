@@ -46,7 +46,7 @@ router.get('/pipeline', async (_req, res) => {
 
   for (const status of statuses) {
     const guests = await prisma.guest.findMany({
-      where: { tags: { has: status } },
+      where: { tags: { contains: status } },
       include: { _count: { select: { bookings: true } } },
       take: 20,
     });
