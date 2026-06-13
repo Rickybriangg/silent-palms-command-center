@@ -12,7 +12,6 @@ out/
 # Database (SQLite dev file)
 *.db
 *.db-journal
-backend/prisma/migrations/
 
 # Environment variables - NEVER commit these
 .env
