@@ -13,6 +13,7 @@ import documentRoutes from './documents';
 import aiRoutes from './ai';
 import userRoutes from './users';
 import publicRoutes from './public';
+import financeRoutes from './finance'; // Finance & Staff Access plugin
 
 const router = Router();
 
@@ -30,5 +31,6 @@ router.use('/documents', documentRoutes);
 router.use('/ai', aiRoutes);
 router.use('/users', userRoutes);
 router.use('/public', publicRoutes);
+router.use('/finance', financeRoutes); // Finance & Staff Access plugin
 
 export default router;

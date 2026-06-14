@@ -5,7 +5,7 @@ import { motion } from 'framer-motion';
 import {
   LayoutDashboard, Megaphone, MessageCircle, CalendarDays,
   TrendingUp, Zap, CheckSquare, Bot, FileText, Settings,
-  ChevronLeft, ChevronRight, PalmtreeIcon, Users
+  ChevronLeft, ChevronRight, PalmtreeIcon, Users, Wallet
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { useState } from 'react';
@@ -17,6 +17,7 @@ const nav = [
   { href: '/whatsapp', label: 'WhatsApp CRM', icon: MessageCircle },
   { href: '/bookings', label: 'Bookings', icon: CalendarDays },
   { href: '/revenue', label: 'Revenue', icon: TrendingUp },
+  { href: '/finance', label: 'Finance', icon: Wallet },
   { href: '/automation', label: 'Automation', icon: Zap },
   { href: '/tasks', label: 'Tasks', icon: CheckSquare },
   { href: '/team', label: 'Team', icon: Users },

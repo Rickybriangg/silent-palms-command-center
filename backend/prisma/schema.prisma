@@ -52,6 +52,7 @@ model User {
   createdTasks  Task[]         @relation("CreatedBy")
   auditLogs     AuditLog[]
   notifications Notification[]
+  restrictions  UserRestriction[] // Finance & Staff Access plugin
 }
 
 model Property {
@@ -193,6 +194,7 @@ model Expense {
   receipt     String?
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
+  approval    ExpenseApproval? // Finance & Staff Access plugin
 }
 
 model Campaign {
@@ -393,4 +395,54 @@ model Document {
   size      Int?
   metadata  String?
   createdAt DateTime @default(now())
+}
+
+// ============================================================
+// Finance & Staff Access Management Plugin (additive module)
+// ============================================================
+
+model ExpenseCategory {
+  id            String   @id @default(cuid())
+  name          String   @unique
+  monthlyBudget Float    @default(0)
+  color         String?
+  isActive      Boolean  @default(true)
+  createdAt     DateTime @default(now())
+}
+
+model ExpenseApproval {
+  id          String    @id @default(cuid())
+  expenseId   String    @unique
+  expense     Expense   @relation(fields: [expenseId], references: [id], onDelete: Cascade)
+  status      String    @default("PENDING") // PENDING | APPROVED | REJECTED
+  requestedBy String?
+  decidedBy   String?
+  decidedAt   DateTime?
+  note        String?
+  createdAt   DateTime  @default(now())
+}
+
+model UserRestriction {
+  id          String   @id @default(cuid())
+  userId      String
+  user        User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  key         String // NO_FINANCE_VIEW | NO_EXPENSE_APPROVE | NO_EXPORT | NO_DELETE | NO_STAFF_MANAGE
+  createdById String?
+  createdAt   DateTime @default(now())
+
+  @@unique([userId, key])
+}
+
+model FinanceTransaction {
+  id           String   @id @default(cuid())
+  type         String // INFLOW | OUTFLOW
+  amount       Float
+  currency     String   @default("USD")
+  category     String?
+  description  String?
+  sourceType   String? // REVENUE | EXPENSE | BOOKING | MANUAL
+  sourceId     String?
+  date         DateTime @default(now())
+  recordedById String?
+  createdAt    DateTime @default(now())
 }
