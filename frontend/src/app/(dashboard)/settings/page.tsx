@@ -125,40 +125,66 @@ function BookingChannels() {
 
 function WebsiteIntegration() {
   const apiBase = (process.env.NEXT_PUBLIC_API_URL || '').replace(/\/$/, '');
-  const endpoint = `${apiBase}/public/inquiry`;
-  const snippet = `<!-- Silent Palms inquiry form — paste into your website -->
-<form onsubmit="event.preventDefault();fetch('${endpoint}',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(Object.fromEntries(new FormData(this)))}).then(r=>r.json()).then(d=>{alert(d.message||'Thank you!');this.reset();});">
+  const icalUrl = `${apiBase}/public/calendar.ics`;
+  const copy = (text: string, what = 'Copied to clipboard') => { navigator.clipboard.writeText(text).then(() => toast.success(what)); };
+
+  const inquirySnippet = `<!-- Silent Palms inquiry form -->
+<form onsubmit="event.preventDefault();fetch('${apiBase}/public/inquiry',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(Object.fromEntries(new FormData(this)))}).then(r=>r.json()).then(d=>{alert(d.message||'Thank you!');this.reset();});">
   <input name="name" placeholder="Your name" required />
   <input name="phone" placeholder="Phone / WhatsApp" required />
   <input name="email" type="email" placeholder="Email" />
-  <input name="checkIn" type="date" />
-  <input name="checkOut" type="date" />
+  <input name="checkIn" type="date" /><input name="checkOut" type="date" />
   <textarea name="message" placeholder="Your message"></textarea>
   <button type="submit">Send Inquiry</button>
 </form>`;
-  const copy = (text: string) => { navigator.clipboard.writeText(text).then(() => toast.success('Copied to clipboard')); };
+
+  const bookingSnippet = `<!-- Silent Palms LIVE booking widget — paste into your website -->
+<div id="sp-booking"></div>
+<script>
+(function(){var API='${apiBase}';var el=document.getElementById('sp-booking');
+fetch(API+'/public/units').then(r=>r.json()).then(function(units){
+  el.innerHTML='<form id="spf">'+
+   '<select name="unitId">'+units.map(function(u){return '<option value="'+u.id+'">'+u.name+' — $'+u.basePrice+'/night</option>'}).join('')+'</select>'+
+   '<input name="checkIn" type="date" required><input name="checkOut" type="date" required>'+
+   '<input name="adults" type="number" value="2" min="1" placeholder="Guests">'+
+   '<input name="firstName" placeholder="First name" required><input name="lastName" placeholder="Last name">'+
+   '<input name="phone" placeholder="Phone / WhatsApp" required><input name="email" type="email" placeholder="Email">'+
+   '<button type="submit">Book Now</button><p id="spmsg"></p></form>';
+  document.getElementById('spf').onsubmit=function(e){e.preventDefault();
+    var d=Object.fromEntries(new FormData(this));
+    fetch(API+'/public/booking',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(d)})
+     .then(r=>r.json()).then(function(res){document.getElementById('spmsg').textContent=res.message+(res.reference?(' Ref: '+res.reference):'');});
+  };
+});
+})();
+</script>`;
 
   return (
     <section className="bg-card border border-border rounded-xl p-6">
-      <div className="flex items-center gap-2 mb-1"><Globe size={16} className="text-primary" /><h3 className="font-semibold">Website Integration</h3></div>
+      <div className="flex items-center gap-2 mb-1"><Globe size={16} className="text-primary" /><h3 className="font-semibold">Website Integration — SilentPalms.com</h3></div>
       <p className="text-xs text-muted-foreground mb-4">
-        Connect your existing website so inquiries land in the CRM automatically (as WhatsApp/marketing leads).
+        Two-way sync with your website: bookings & inquiries flow into the CRM automatically, and your live calendar can be shared with external platforms.
       </p>
-      <div className="space-y-3">
+      <div className="space-y-4">
         <div>
-          <label className="text-xs text-muted-foreground">Inquiry API endpoint (POST)</label>
+          <label className="text-xs font-medium">1 · Live Booking Widget (checks availability, creates bookings)</label>
+          <textarea readOnly value={bookingSnippet} rows={6} className="w-full mt-1 rounded-md border border-input bg-background p-2 text-[10px] font-mono" />
+          <Button size="sm" variant="outline" className="text-xs mt-1" onClick={() => copy(bookingSnippet, 'Booking widget copied')}>Copy Booking Widget</Button>
+        </div>
+        <div>
+          <label className="text-xs font-medium">2 · Inquiry Form (captures leads)</label>
+          <textarea readOnly value={inquirySnippet} rows={4} className="w-full mt-1 rounded-md border border-input bg-background p-2 text-[10px] font-mono" />
+          <Button size="sm" variant="outline" className="text-xs mt-1" onClick={() => copy(inquirySnippet, 'Inquiry form copied')}>Copy Inquiry Form</Button>
+        </div>
+        <div>
+          <label className="text-xs font-medium">3 · Calendar Feed (iCal) — subscribe from Google / Airbnb / Booking.com</label>
           <div className="flex gap-2 mt-1">
-            <Input className="h-8 text-xs font-mono" readOnly value={endpoint} />
-            <Button size="sm" variant="outline" className="text-xs" onClick={() => copy(endpoint)}>Copy</Button>
+            <Input className="h-8 text-xs font-mono" readOnly value={icalUrl} />
+            <Button size="sm" variant="outline" className="text-xs" onClick={() => copy(icalUrl, 'Calendar URL copied')}>Copy</Button>
           </div>
         </div>
-        <div>
-          <label className="text-xs text-muted-foreground">Embeddable form (paste into your site)</label>
-          <textarea readOnly value={snippet} rows={6} className="w-full mt-1 rounded-md border border-input bg-background p-2 text-[11px] font-mono" />
-          <Button size="sm" variant="outline" className="text-xs mt-1" onClick={() => copy(snippet)}>Copy Form Code</Button>
-        </div>
         <p className="text-[11px] text-muted-foreground">
-          Tip: if your site is on WordPress/Wix/Squarespace, paste this into a Custom HTML / Embed block. Submissions appear under WhatsApp CRM → Conversations.
+          Paste the widget/form into a Custom HTML block on SilentPalms.com. Bookings appear under Bookings (high-value/group ones go to <strong>Awaiting Approval</strong>); inquiries appear under WhatsApp CRM. Add channel iCal URLs below to pull external reservations in.
         </p>
       </div>
     </section>

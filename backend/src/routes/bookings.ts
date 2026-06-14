@@ -1,6 +1,6 @@
 import { Router, Response } from 'express';
 import { getBookings, getBooking, createBooking, updateBooking, getCalendar, getAvailability } from '../controllers/bookingController';
-import { authenticate, AuthRequest } from '../middleware/auth';
+import { authenticate, authorize, AuthRequest } from '../middleware/auth';
 import { prisma } from '../lib/prisma';
 import { sendWhatsApp } from '../lib/whatsappSend';
 
@@ -11,6 +11,20 @@ router.get('/', getBookings);
 router.post('/', createBooking);
 router.get('/calendar', getCalendar);
 router.get('/availability', getAvailability);
+
+// Bookings awaiting management approval (from the website high-value/group routing).
+router.get('/awaiting-approval', async (_req: AuthRequest, res: Response) => {
+  const rows = await prisma.booking.findMany({ where: { status: 'AWAITING_APPROVAL' }, include: { guest: true, unit: true }, orderBy: { createdAt: 'desc' } });
+  res.json(rows);
+});
+
+// Approve or reject a booking that is awaiting approval (manager/admin).
+router.post('/:id/approve', authorize('SUPER_ADMIN', 'PROPERTY_MANAGER', 'FINANCE_MANAGER'), async (req: AuthRequest, res: Response) => {
+  const { decision } = req.body ?? {};
+  const status = decision === 'REJECT' ? 'CANCELLED' : 'CONFIRMED';
+  const booking = await prisma.booking.update({ where: { id: req.params.id }, data: { status }, include: { guest: true } });
+  res.json({ id: booking.id, status });
+});
 
 // Send a booking confirmation to the guest via WhatsApp.
 router.post('/:id/confirm', async (req: AuthRequest, res: Response) => {

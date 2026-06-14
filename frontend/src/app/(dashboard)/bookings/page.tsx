@@ -24,12 +24,14 @@ const CHANNELS = ['DIRECT', 'AIRBNB', 'BOOKING_COM', 'EXPEDIA', 'WHATSAPP'];
 
 const STATUS_COLORS: Record<string, string> = {
   PENDING: 'bg-amber-100 text-amber-700',
+  AWAITING_APPROVAL: 'bg-orange-100 text-orange-700',
   CONFIRMED: 'bg-blue-100 text-blue-700',
   ARRIVING: 'bg-purple-100 text-purple-700',
   CHECKED_IN: 'bg-emerald-100 text-emerald-700',
   CHECKED_OUT: 'bg-slate-100 text-slate-600',
   CANCELLED: 'bg-red-100 text-red-700',
   NO_SHOW: 'bg-orange-100 text-orange-700',
+  MAINTENANCE_BLOCKED: 'bg-zinc-200 text-zinc-700',
 };
 
 const CHANNEL_ICONS: Record<string, string> = {
@@ -328,6 +330,11 @@ function ViewBookingModal({ booking, onClose }: { booking: any; onClose: () => v
     },
     onError: (e: any) => toast.error(e?.response?.data?.error ?? 'Failed'),
   });
+  const approve = useMutation({
+    mutationFn: (decision: string) => api.post(`/bookings/${booking.id}/approve`, { decision }),
+    onSuccess: (r) => { qc.invalidateQueries({ queryKey: ['bookings'] }); toast.success(`Booking ${r.data?.status === 'CANCELLED' ? 'rejected' : 'approved'}`); onClose(); },
+    onError: (e: any) => toast.error(e?.response?.data?.error ?? 'Failed'),
+  });
   const row = (label: string, value: any) => (
     <div className="flex justify-between py-1.5 border-b border-border/50 text-sm">
       <span className="text-muted-foreground">{label}</span>
@@ -349,7 +356,15 @@ function ViewBookingModal({ booking, onClose }: { booking: any; onClose: () => v
         {row('Total', `$${Number(booking.totalAmount ?? 0).toLocaleString()}`)}
         {row('Paid', `$${Number(booking.paidAmount ?? 0).toLocaleString()}`)}
       </div>
-      <div className="grid grid-cols-2 gap-2 mt-4">
+      {booking.status === 'AWAITING_APPROVAL' && (
+        <div className="grid grid-cols-2 gap-2 mt-4">
+          <Button variant="outline" className="border-red-300 text-red-600" disabled={approve.isPending} onClick={() => approve.mutate('REJECT')}>Reject</Button>
+          <Button className="bg-emerald-600 hover:bg-emerald-700 text-white" disabled={approve.isPending} onClick={() => approve.mutate('APPROVE')}>
+            {approve.isPending ? <Loader2 size={15} className="animate-spin mr-2" /> : null} Approve Booking
+          </Button>
+        </div>
+      )}
+      <div className="grid grid-cols-2 gap-2 mt-2">
         <Button variant="outline" onClick={() => generateInvoice(booking)}>Generate Invoice</Button>
         <Button className="bg-primary hover:bg-primary/90" disabled={confirm.isPending} onClick={() => confirm.mutate()}>
           {confirm.isPending ? <Loader2 size={15} className="animate-spin mr-2" /> : null} Send Confirmation
