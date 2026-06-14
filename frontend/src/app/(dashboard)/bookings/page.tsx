@@ -15,8 +15,10 @@ import { motion } from 'framer-motion';
 import { BookingCalendar } from '@/components/bookings/BookingCalendar';
 
 const UNITS = [
-  { id: 'whole-villa', name: 'Whole Villa', basePrice: 500 },
-  { id: 'two-bedroom', name: '2-Bedroom Unit', basePrice: 280 },
+  { id: '1-bedroom-csuite', name: '1-Bedroom C-Suite', basePrice: 45 },
+  { id: 'two-bedroom', name: '2-Bedroom Suite', basePrice: 65 },
+  { id: '4-bedroom-villa', name: '4-Bedroom Villa', basePrice: 140 },
+  { id: 'whole-villa', name: 'Full Villa', basePrice: 450 },
 ];
 const CHANNELS = ['DIRECT', 'AIRBNB', 'BOOKING_COM', 'EXPEDIA', 'WHATSAPP'];
 
