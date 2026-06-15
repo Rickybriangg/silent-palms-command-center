@@ -43,23 +43,84 @@ router.post('/:id/toggle', async (req, res) => {
 });
 
 // Manually run a workflow (test execution). Records a run and reports the actions.
-router.post('/:id/run', async (req, res) => {
+// Find the bookings/guests a trigger applies to, right now.
+async function findTargets(event: string) {
+  const now = new Date();
+  const startToday = new Date(now); startToday.setHours(0, 0, 0, 0);
+  const endToday = new Date(now); endToday.setHours(23, 59, 59, 999);
+  const tomA = new Date(startToday); tomA.setDate(tomA.getDate() + 1);
+  const tomB = new Date(endToday); tomB.setDate(tomB.getDate() + 1);
+  const weekAgo = new Date(now); weekAgo.setDate(weekAgo.getDate() - 7);
+
+  const inc = { guest: true, unit: true } as const;
+  let where: any; let stage: string;
+  switch (event) {
+    case 'DAY_BEFORE_ARRIVAL': where = { checkIn: { gte: tomA, lte: tomB }, status: { notIn: ['CANCELLED', 'NO_SHOW'] } }; stage = 'Arriving'; break;
+    case 'CHECK_IN_PLUS_2H': where = { checkIn: { gte: startToday, lte: endToday } }; stage = 'Checked In'; break;
+    case 'MID_STAY': where = { checkIn: { lt: startToday }, checkOut: { gt: endToday }, status: { in: ['CHECKED_IN', 'CONFIRMED'] } }; stage = 'Staying'; break;
+    case 'CHECKOUT_DAY': where = { checkOut: { gte: startToday, lte: endToday } }; stage = 'Checked Out'; break;
+    case 'AFTER_CHECKOUT': where = { checkOut: { gte: weekAgo, lte: endToday } }; stage = 'Review Pending'; break;
+    case 'BOOKING_CREATED': default: where = { createdAt: { gte: weekAgo } }; stage = 'Booked'; break;
+  }
+  const bookings = await prisma.booking.findMany({ where, include: inc, orderBy: { updatedAt: 'desc' }, take: 25 });
+  return bookings.map(b => ({ bookingId: b.id, guestId: b.guestId, guest: `${b.guest.firstName} ${b.guest.lastName}`, unit: b.unit?.name ?? '', stage, reference: b.referenceNumber }));
+}
+
+router.post('/:id/run', async (req: any, res) => {
   const workflow = await prisma.automationWorkflow.findUnique({ where: { id: req.params.id } });
   if (!workflow) return res.status(404).json({ error: 'Not found' });
 
-  let actions: any[] = [];
-  try { actions = typeof workflow.actions === 'string' ? JSON.parse(workflow.actions) : (workflow.actions as any) ?? []; } catch { actions = []; }
-  const summary = actions.map((a: any) => a.type?.replace(/_/g, ' ')).filter(Boolean);
+  const parse = (v: any) => { try { return typeof v === 'string' ? JSON.parse(v) : v; } catch { return v; } };
+  const trigger = parse(workflow.trigger) ?? {};
+  const actions: any[] = parse(workflow.actions) ?? [];
+  const event = trigger?.event ?? 'BOOKING_CREATED';
 
-  await prisma.automationWorkflow.update({
-    where: { id: req.params.id },
-    data: { runCount: { increment: 1 }, lastRunAt: new Date() },
-  });
+  const targets = await findTargets(event);
+  const results: any[] = [];
+
+  // Apply each action to each matched client.
+  for (const t of targets) {
+    for (const a of actions) {
+      if (a.type === 'SEND_WHATSAPP') {
+        const slug = a.config?.template ? `/${a.config.template}` : '';
+        const body = `[Automation: ${workflow.name}] ${slug} message sent to ${t.guest}.`;
+        await prisma.whatsAppMessage.create({ data: { guestId: t.guestId, direction: 'OUTBOUND', body, status: 'SENT', templateId: a.config?.template ?? null } }).catch(() => {});
+        results.push({ client: t.guest, stage: t.stage, action: `WhatsApp ${slug || 'message'}`, reference: t.reference });
+      } else if (a.type === 'NOTIFY_TEAM') {
+        results.push({ client: t.guest, stage: t.stage, action: 'Team notified', reference: t.reference });
+      } else if (a.type === 'SCHEDULE_REVIEW') {
+        results.push({ client: t.guest, stage: t.stage, action: 'Review request scheduled', reference: t.reference });
+      } else {
+        results.push({ client: t.guest, stage: t.stage, action: (a.type ?? 'action').replace(/_/g, ' '), reference: t.reference });
+      }
+    }
+    if (actions.length === 0) results.push({ client: t.guest, stage: t.stage, action: 'matched (no actions)', reference: t.reference });
+  }
+
+  // Notify managers once with a summary.
+  if (results.length) {
+    const mgrs = await prisma.user.findMany({ where: { role: { name: { in: ['SUPER_ADMIN', 'PROPERTY_MANAGER'] } }, isActive: true }, select: { id: true } });
+    await prisma.notification.createMany({ data: mgrs.map(m => ({ userId: m.id, title: `Automation ran: ${workflow.name}`, body: `${targets.length} client(s) processed`, type: 'AUTOMATION' })) }).catch(() => {});
+  }
+
+  await prisma.automationWorkflow.update({ where: { id: req.params.id }, data: { runCount: { increment: 1 }, lastRunAt: new Date() } });
   await prisma.workflowExecution.create({
-    data: { workflowId: workflow.id, status: 'SUCCESS', context: JSON.stringify({ ran: summary, test: true }), completedAt: new Date() },
+    data: { workflowId: workflow.id, status: 'SUCCESS', context: JSON.stringify({ event, clients: targets.length, results: results.slice(0, 25) }), completedAt: new Date() },
   }).catch(() => {});
 
-  res.json({ success: true, message: `Workflow ran — actions: ${summary.join(', ') || 'none'}` });
+  res.json({
+    success: true,
+    trigger: event,
+    clientsProcessed: targets.length,
+    results,
+    message: targets.length ? `Ran on ${targets.length} client(s).` : 'Ran — no clients currently match this trigger.',
+  });
+});
+
+// Execution history for a workflow.
+router.get('/:id/executions', async (req, res) => {
+  const execs = await prisma.workflowExecution.findMany({ where: { workflowId: req.params.id }, orderBy: { startedAt: 'desc' }, take: 20 });
+  res.json(execs.map(e => ({ id: e.id, status: e.status, startedAt: e.startedAt, context: (() => { try { return JSON.parse(e.context || '{}'); } catch { return {}; } })() })));
 });
 
 // Default workflows seed data

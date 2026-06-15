@@ -32,6 +32,7 @@ const ACTION_ICONS: Record<string, string> = {
 export default function AutomationPage() {
   const qc = useQueryClient();
   const [showNew, setShowNew] = useState(false);
+  const [runResult, setRunResult] = useState<any | null>(null);
 
   const { data: workflows = [] } = useQuery({
     queryKey: ['workflows'],
@@ -45,8 +46,8 @@ export default function AutomationPage() {
   });
 
   const runMutation = useMutation({
-    mutationFn: (id: string) => api.post(`/automation/${id}/run`),
-    onSuccess: (r) => { qc.invalidateQueries({ queryKey: ['workflows'] }); toast.success(r.data?.message ?? 'Workflow ran'); },
+    mutationFn: ({ id, name }: { id: string; name: string }) => api.post(`/automation/${id}/run`).then(r => ({ ...r.data, name })),
+    onSuccess: (data) => { qc.invalidateQueries({ queryKey: ['workflows'] }); setRunResult(data); toast.success(data?.message ?? 'Workflow ran'); },
     onError: (e: any) => toast.error(e?.response?.data?.error ?? 'Failed to run workflow'),
   });
 
@@ -103,7 +104,7 @@ export default function AutomationPage() {
                   <div className="text-xs text-muted-foreground flex items-center gap-1">
                     <BarChart2 size={12} /> {w.runCount} runs
                   </div>
-                  <Button size="sm" variant="outline" className="h-7 text-xs gap-1" disabled={runMutation.isPending} onClick={() => runMutation.mutate(w.id)}>
+                  <Button size="sm" variant="outline" className="h-7 text-xs gap-1" disabled={runMutation.isPending} onClick={() => runMutation.mutate({ id: w.id, name: w.name })}>
                     <Play size={11} /> Run
                   </Button>
                   <button
@@ -159,6 +160,45 @@ export default function AutomationPage() {
       </div>
 
       {showNew && <NewWorkflowModal onClose={() => setShowNew(false)} onSubmit={(d) => createWorkflow.mutate(d)} loading={createWorkflow.isPending} />}
+
+      {runResult && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4" onClick={() => setRunResult(null)}>
+          <motion.div initial={{ opacity: 0, scale: 0.96 }} animate={{ opacity: 1, scale: 1 }}
+            className="bg-card border border-border rounded-xl w-full max-w-lg p-6 shadow-xl max-h-[85vh] overflow-y-auto" onClick={e => e.stopPropagation()}>
+            <div className="flex items-center justify-between mb-1">
+              <h3 className="font-semibold flex items-center gap-2"><Zap size={16} className="text-primary" /> {runResult.name}</h3>
+              <button onClick={() => setRunResult(null)} className="text-muted-foreground hover:text-foreground"><X size={18} /></button>
+            </div>
+            <p className="text-xs text-muted-foreground mb-4">
+              Trigger <span className="font-medium text-foreground">{TRIGGER_LABELS[runResult.trigger] ?? runResult.trigger}</span> · {runResult.clientsProcessed} client(s) processed
+            </p>
+            {(runResult.results ?? []).length === 0 ? (
+              <div className="py-8 text-center text-muted-foreground text-sm">No clients currently match this trigger. Try the "New Booking" trigger, or add bookings in the matching window.</div>
+            ) : (
+              <div className="space-y-2">
+                {(runResult.results ?? []).map((r: any, i: number) => (
+                  <div key={i} className="flex items-center justify-between border border-border/60 rounded-lg px-3 py-2">
+                    <div className="flex items-center gap-2 min-w-0">
+                      <div className="w-7 h-7 rounded-full bg-primary/10 text-primary text-[10px] font-bold flex items-center justify-center shrink-0">
+                        {r.client?.split(' ').map((p: string) => p[0]).slice(0, 2).join('')}
+                      </div>
+                      <div className="min-w-0">
+                        <p className="text-sm font-medium truncate">{r.client}</p>
+                        <p className="text-[10px] text-muted-foreground">{r.reference}</p>
+                      </div>
+                    </div>
+                    <div className="text-right shrink-0">
+                      <span className="text-[10px] px-2 py-0.5 rounded-full bg-primary/10 text-primary font-medium">{r.stage}</span>
+                      <p className="text-[11px] text-emerald-600 mt-0.5">✓ {r.action}</p>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+            <Button className="w-full mt-4" variant="outline" onClick={() => setRunResult(null)}>Close</Button>
+          </motion.div>
+        </div>
+      )}
     </div>
   );
 }
