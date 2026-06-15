@@ -133,11 +133,20 @@ function EmailReviews() {
 
   const [from, setFrom] = useState('');
   const [apiKey, setApiKey] = useState('');
-  const [reviewUrl, setReviewUrl] = useState('');
+  const [reviewInput, setReviewInput] = useState('');
   const [testTo, setTestTo] = useState('');
   const [promo, setPromo] = useState({ subject: '', message: '', segment: 'all' });
   useEffect(() => { if (email) setFrom(email.handle ?? ''); }, [email]);
-  useEffect(() => { if (gb) setReviewUrl(gb.profileUrl ?? ''); }, [gb]);
+  useEffect(() => { if (gb) setReviewInput(gb.profileUrl || gb.accountId || ''); }, [gb]);
+
+  // Accept a full link, a Google Maps URL, or a bare Place ID and build a working review link.
+  const buildReviewLink = (raw: string) => {
+    const v = (raw || '').trim();
+    if (!v) return '';
+    if (/^https?:\/\//i.test(v)) return v; // already a link (g.page / maps / writereview)
+    return `https://search.google.com/local/writereview?placeid=${encodeURIComponent(v)}`; // treat as Place ID
+  };
+  const previewLink = buildReviewLink(reviewInput);
 
   const saveEmail = useMutation({
     mutationFn: () => api.put('/marketing/social-accounts/EMAIL', { handle: from, accessToken: apiKey, connected: true }),
@@ -145,7 +154,12 @@ function EmailReviews() {
     onError: () => toast.error('Save failed'),
   });
   const saveReview = useMutation({
-    mutationFn: () => api.put('/marketing/social-accounts/GOOGLE_BUSINESS', { profileUrl: reviewUrl, connected: !!reviewUrl }),
+    mutationFn: () => {
+      const v = reviewInput.trim();
+      const isUrl = /^https?:\/\//i.test(v);
+      // Store a URL as profileUrl, or a bare Place ID as accountId — backend builds the link either way.
+      return api.put('/marketing/social-accounts/GOOGLE_BUSINESS', { profileUrl: isUrl ? v : null, accountId: isUrl ? null : v, connected: !!v });
+    },
     onSuccess: () => { toast.success('Google review link saved'); qc.invalidateQueries({ queryKey: ['social-accounts'] }); },
     onError: () => toast.error('Save failed'),
   });
@@ -183,14 +197,25 @@ function EmailReviews() {
           <p className="text-[10px] text-muted-foreground">Create a free key at resend.com, verify your domain, then paste the key + a from-address on that domain.</p>
         </div>
 
-        {/* Google review link */}
+        {/* Google review link — paste a link OR just a Place ID */}
         <div className="space-y-1.5">
-          <label className="text-xs font-medium flex items-center gap-1"><Star size={12} className="text-amber-500" /> Google Review Link {gb?.connected && <CheckCircle2 size={12} className="text-emerald-500" />}</label>
+          <label className="text-xs font-medium flex items-center gap-1"><Star size={12} className="text-amber-500" /> Google Reviews {gb?.connected && <CheckCircle2 size={12} className="text-emerald-500" />}</label>
           <div className="flex gap-2">
-            <Input className="h-8 text-sm flex-1" value={reviewUrl} onChange={e => setReviewUrl(e.target.value)} placeholder="https://g.page/r/…/review" />
+            <Input className="h-8 text-sm flex-1" value={reviewInput} onChange={e => setReviewInput(e.target.value)} placeholder="Paste your review link  OR  Place ID (e.g. ChIJ...)" />
             <Button size="sm" className="text-xs bg-primary hover:bg-primary/90" disabled={saveReview.isPending} onClick={() => saveReview.mutate()}>Save</Button>
           </div>
-          <p className="text-[10px] text-muted-foreground">From Google Business Profile → Ask for reviews → copy your short review link. Review requests (Bookings → Request Review) will point guests here.</p>
+          {previewLink && (
+            <div className="flex items-center gap-2 text-[11px]">
+              <span className="text-muted-foreground">Review link:</span>
+              <a href={previewLink} target="_blank" rel="noreferrer" className="text-primary underline truncate flex-1">{previewLink}</a>
+              <a href={previewLink} target="_blank" rel="noreferrer" className="shrink-0"><Button size="sm" variant="outline" className="h-6 text-[10px]">Test ↗</Button></a>
+            </div>
+          )}
+          <p className="text-[10px] text-muted-foreground">
+            Easiest: paste your <strong>Place ID</strong> — find it free here{' '}
+            <a href="https://developers.google.com/maps/documentation/places/web-service/place-id" target="_blank" rel="noreferrer" className="text-primary underline">Google Place ID finder ↗</a>{' '}
+            (search your business, copy the ID). Or paste your <strong>g.page</strong> review link from Google Business Profile → "Ask for reviews". We build the working link automatically.
+          </p>
         </div>
 
         {/* Promotional blast */}
