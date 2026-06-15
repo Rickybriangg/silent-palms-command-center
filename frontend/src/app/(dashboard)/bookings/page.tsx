@@ -335,6 +335,11 @@ function ViewBookingModal({ booking, onClose }: { booking: any; onClose: () => v
     onSuccess: (r) => { qc.invalidateQueries({ queryKey: ['bookings'] }); toast.success(`Booking ${r.data?.status === 'CANCELLED' ? 'rejected' : 'approved'}`); onClose(); },
     onError: (e: any) => toast.error(e?.response?.data?.error ?? 'Failed'),
   });
+  const review = useMutation({
+    mutationFn: () => api.post(`/bookings/${booking.id}/review-request`),
+    onSuccess: (r) => r.data?.delivered ? toast.success(r.data?.note ?? 'Review request sent') : toast.warning(r.data?.note ?? 'Could not send', { duration: 6000 }),
+    onError: (e: any) => toast.error(e?.response?.data?.error ?? 'Failed'),
+  });
   const row = (label: string, value: any) => (
     <div className="flex justify-between py-1.5 border-b border-border/50 text-sm">
       <span className="text-muted-foreground">{label}</span>
@@ -370,6 +375,9 @@ function ViewBookingModal({ booking, onClose }: { booking: any; onClose: () => v
           {confirm.isPending ? <Loader2 size={15} className="animate-spin mr-2" /> : null} Send Confirmation
         </Button>
       </div>
+      <Button variant="outline" className="w-full mt-2 gap-1" disabled={review.isPending} onClick={() => review.mutate()}>
+        {review.isPending ? <Loader2 size={15} className="animate-spin mr-2" /> : null} Request Google Review
+      </Button>
     </ModalShell>
   );
 }

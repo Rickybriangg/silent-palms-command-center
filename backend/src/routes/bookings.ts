@@ -3,6 +3,7 @@ import { getBookings, getBooking, createBooking, updateBooking, getCalendar, get
 import { authenticate, authorize, AuthRequest } from '../middleware/auth';
 import { prisma } from '../lib/prisma';
 import { sendWhatsApp } from '../lib/whatsappSend';
+import { sendEmail, templates } from '../lib/email';
 
 const router = Router();
 router.use(authenticate);
@@ -44,7 +45,7 @@ router.post('/:id/confirm', async (req: AuthRequest, res: Response) => {
     `We look forward to welcoming you to Diani Beach!`,
   ].join('\n');
 
-  // Mark confirmed and record the message.
+  // Mark confirmed and record/send across channels.
   await prisma.booking.update({ where: { id: booking.id }, data: { status: 'CONFIRMED' } });
   const wa = await sendWhatsApp(booking.guest.whatsapp || booking.guest.phone, msg);
   await prisma.whatsAppMessage.create({
@@ -53,7 +54,38 @@ router.post('/:id/confirm', async (req: AuthRequest, res: Response) => {
       status: wa.ok ? 'SENT' : (wa.connected ? 'FAILED' : 'PENDING'), messageId: wa.externalId || null,
     },
   });
-  res.json({ delivered: wa.ok, note: wa.ok ? 'Confirmation sent via WhatsApp.' : wa.error });
+  // Also email the guest a branded confirmation, if they have an email.
+  const em = booking.guest.email
+    ? await sendEmail(booking.guest.email, `Booking confirmed — ${booking.referenceNumber}`, templates.bookingConfirmation(booking.guest, booking))
+    : { ok: false, error: 'No email on file' };
+
+  const channels = [wa.ok && 'WhatsApp', em.ok && 'email'].filter(Boolean);
+  res.json({
+    delivered: wa.ok || em.ok,
+    whatsapp: wa.ok, email: em.ok,
+    note: channels.length ? `Confirmation sent via ${channels.join(' + ')}.` : (wa.error || em.error),
+  });
+});
+
+// Send a review request (Google Business link) via email + WhatsApp.
+router.post('/:id/review-request', async (req: AuthRequest, res: Response) => {
+  const booking = await prisma.booking.findUnique({ where: { id: req.params.id }, include: { guest: true } });
+  if (!booking) return res.status(404).json({ error: 'Booking not found' });
+
+  const gb = await prisma.socialAccount.findUnique({ where: { platform: 'GOOGLE_BUSINESS' } });
+  const reviewUrl = gb?.profileUrl
+    || (gb?.accountId ? `https://search.google.com/local/writereview?placeid=${gb.accountId}` : null);
+  if (!reviewUrl) return res.status(400).json({ error: 'Add your Google review link (or Place ID) in Settings → Email & Reviews first.' });
+
+  const waMsg = `Hi ${booking.guest.firstName}, thank you for staying at Silent Palms Villa! 🌴 We'd love your feedback — please leave us a quick Google review: ${reviewUrl}`;
+  const wa = await sendWhatsApp(booking.guest.whatsapp || booking.guest.phone, waMsg);
+  await prisma.whatsAppMessage.create({ data: { guestId: booking.guestId, direction: 'OUTBOUND', body: waMsg, status: wa.ok ? 'SENT' : (wa.connected ? 'FAILED' : 'PENDING') } }).catch(() => {});
+  const em = booking.guest.email
+    ? await sendEmail(booking.guest.email, 'How was your stay at Silent Palms? ⭐', templates.reviewRequest(booking.guest, reviewUrl))
+    : { ok: false, error: 'No email on file' };
+
+  const channels = [wa.ok && 'WhatsApp', em.ok && 'email'].filter(Boolean);
+  res.json({ delivered: wa.ok || em.ok, reviewUrl, note: channels.length ? `Review request sent via ${channels.join(' + ')}.` : (wa.error || em.error) });
 });
 
 // Sync reservations from connected channel iCal feeds (Airbnb, Booking.com, etc.).

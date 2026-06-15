@@ -7,7 +7,7 @@ import { useAuthStore } from '@/store/authStore';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import { MapPin, User, Palmtree, Bell, Share2, CheckCircle2, Loader2, RefreshCw, Upload, Users, Globe } from 'lucide-react';
+import { MapPin, User, Palmtree, Bell, Share2, CheckCircle2, Loader2, RefreshCw, Upload, Users, Globe, Mail, Star, Send } from 'lucide-react';
 import { toast } from 'sonner';
 
 const CHANNELS = [
@@ -58,6 +58,8 @@ export default function SettingsPage() {
         <BookingChannels />
 
         <WebsiteIntegration />
+
+        <EmailReviews />
 
         <ImportContacts />
 
@@ -118,6 +120,95 @@ function BookingChannels() {
             </div>
           );
         })}
+      </div>
+    </section>
+  );
+}
+
+function EmailReviews() {
+  const qc = useQueryClient();
+  const { data: accounts = [] } = useQuery({ queryKey: ['social-accounts'], queryFn: () => api.get('/marketing/social-accounts').then(r => r.data) });
+  const email = accounts.find((a: any) => a.platform === 'EMAIL');
+  const gb = accounts.find((a: any) => a.platform === 'GOOGLE_BUSINESS');
+
+  const [from, setFrom] = useState('');
+  const [apiKey, setApiKey] = useState('');
+  const [reviewUrl, setReviewUrl] = useState('');
+  const [testTo, setTestTo] = useState('');
+  const [promo, setPromo] = useState({ subject: '', message: '', segment: 'all' });
+  useEffect(() => { if (email) setFrom(email.handle ?? ''); }, [email]);
+  useEffect(() => { if (gb) setReviewUrl(gb.profileUrl ?? ''); }, [gb]);
+
+  const saveEmail = useMutation({
+    mutationFn: () => api.put('/marketing/social-accounts/EMAIL', { handle: from, accessToken: apiKey, connected: true }),
+    onSuccess: () => { toast.success('Email provider saved'); setApiKey(''); qc.invalidateQueries({ queryKey: ['social-accounts'] }); },
+    onError: () => toast.error('Save failed'),
+  });
+  const saveReview = useMutation({
+    mutationFn: () => api.put('/marketing/social-accounts/GOOGLE_BUSINESS', { profileUrl: reviewUrl, connected: !!reviewUrl }),
+    onSuccess: () => { toast.success('Google review link saved'); qc.invalidateQueries({ queryKey: ['social-accounts'] }); },
+    onError: () => toast.error('Save failed'),
+  });
+  const test = useMutation({
+    mutationFn: () => api.post('/marketing/email/test', { to: testTo }),
+    onSuccess: (r) => r.data?.delivered ? toast.success('Test email sent!') : toast.error(r.data?.error ?? 'Failed'),
+    onError: (e: any) => toast.error(e?.response?.data?.error ?? 'Failed'),
+  });
+  const blast = useMutation({
+    mutationFn: () => api.post('/marketing/email/blast', promo),
+    onSuccess: (r) => { toast.success(r.data?.message ?? 'Sent'); setPromo({ subject: '', message: '', segment: 'all' }); },
+    onError: (e: any) => toast.error(e?.response?.data?.error ?? 'Failed'),
+  });
+
+  return (
+    <section className="bg-card border border-border rounded-xl p-6">
+      <div className="flex items-center gap-2 mb-1"><Mail size={16} className="text-primary" /><h3 className="font-semibold">Email &amp; Reviews</h3></div>
+      <p className="text-xs text-muted-foreground mb-4">Send branded booking confirmations, promotions and review requests by email. Reviews link straight to your Google Business Profile.</p>
+
+      <div className="space-y-5">
+        {/* Email provider */}
+        <div className="space-y-2">
+          <label className="text-xs font-medium flex items-center gap-1">Email Provider {email?.connected && <CheckCircle2 size={12} className="text-emerald-500" />}</label>
+          <div className="grid grid-cols-2 gap-2">
+            <div><Label className="text-xs">From address</Label><Input className="h-8 text-sm" value={from} onChange={e => setFrom(e.target.value)} placeholder="bookings@silentpalms.com" /></div>
+            <div><Label className="text-xs">Resend API key</Label><Input className="h-8 text-sm" type="password" value={apiKey} onChange={e => setApiKey(e.target.value)} placeholder={email?.hasToken ? '•••• saved' : 're_xxxxxxxx'} /></div>
+          </div>
+          <div className="flex gap-2">
+            <Button size="sm" className="text-xs bg-primary hover:bg-primary/90" disabled={saveEmail.isPending} onClick={() => saveEmail.mutate()}>Save Provider</Button>
+            <div className="flex gap-1 flex-1">
+              <Input className="h-8 text-xs" value={testTo} onChange={e => setTestTo(e.target.value)} placeholder="you@email.com" />
+              <Button size="sm" variant="outline" className="text-xs gap-1" disabled={test.isPending || !testTo} onClick={() => test.mutate()}><Send size={12} /> Test</Button>
+            </div>
+          </div>
+          <p className="text-[10px] text-muted-foreground">Create a free key at resend.com, verify your domain, then paste the key + a from-address on that domain.</p>
+        </div>
+
+        {/* Google review link */}
+        <div className="space-y-1.5">
+          <label className="text-xs font-medium flex items-center gap-1"><Star size={12} className="text-amber-500" /> Google Review Link {gb?.connected && <CheckCircle2 size={12} className="text-emerald-500" />}</label>
+          <div className="flex gap-2">
+            <Input className="h-8 text-sm flex-1" value={reviewUrl} onChange={e => setReviewUrl(e.target.value)} placeholder="https://g.page/r/…/review" />
+            <Button size="sm" className="text-xs bg-primary hover:bg-primary/90" disabled={saveReview.isPending} onClick={() => saveReview.mutate()}>Save</Button>
+          </div>
+          <p className="text-[10px] text-muted-foreground">From Google Business Profile → Ask for reviews → copy your short review link. Review requests (Bookings → Request Review) will point guests here.</p>
+        </div>
+
+        {/* Promotional blast */}
+        <div className="space-y-2 border-t border-border/60 pt-4">
+          <label className="text-xs font-medium">Send a Promotion</label>
+          <Input className="h-8 text-sm" value={promo.subject} onChange={e => setPromo(p => ({ ...p, subject: e.target.value }))} placeholder="Subject — e.g. 20% off June stays 🌴" />
+          <textarea className="w-full rounded-md border border-input bg-background p-2 text-sm" rows={3} value={promo.message} onChange={e => setPromo(p => ({ ...p, message: e.target.value }))} placeholder="Your promotional message…" />
+          <div className="flex gap-2 items-center">
+            <select className="h-8 rounded-md border border-input bg-background px-2 text-sm" value={promo.segment} onChange={e => setPromo(p => ({ ...p, segment: e.target.value }))}>
+              <option value="all">All contacts</option>
+              <option value="leads">Leads only</option>
+              <option value="vip">VIP guests</option>
+            </select>
+            <Button size="sm" className="text-xs bg-primary hover:bg-primary/90 gap-1" disabled={blast.isPending || !promo.subject || !promo.message} onClick={() => blast.mutate()}>
+              {blast.isPending ? <Loader2 size={12} className="animate-spin" /> : <Send size={12} />} Send Promotion
+            </Button>
+          </div>
+        </div>
       </div>
     </section>
   );

@@ -2,6 +2,7 @@ import { Router } from 'express';
 import { authenticate, authorize } from '../middleware/auth';
 import { prisma } from '../lib/prisma';
 import { publishToSocial } from '../lib/socialPublish';
+import { sendEmail, templates } from '../lib/email';
 import multer from 'multer';
 import * as xlsx from 'xlsx';
 
@@ -197,7 +198,7 @@ router.post('/upload-batch', upload.single('file'), async (req, res) => {
 
 // --- Social Accounts (credentials for auto-publishing) ---
 const SOCIAL_PLATFORMS = [
-  'INSTAGRAM', 'FACEBOOK', 'TWITTER', 'TIKTOK', 'GOOGLE_BUSINESS', 'WHATSAPP',
+  'INSTAGRAM', 'FACEBOOK', 'TWITTER', 'TIKTOK', 'GOOGLE_BUSINESS', 'WHATSAPP', 'EMAIL',
   // Booking channel iCal feeds (profileUrl holds the iCal URL)
   'CHANNEL_AIRBNB', 'CHANNEL_BOOKING', 'CHANNEL_EXPEDIA', 'CHANNEL_VRBO',
 ];
@@ -243,6 +244,33 @@ router.put('/social-accounts/:platform', authorize('SUPER_ADMIN', 'MARKETING_ADM
     platform: account.platform, handle: account.handle, profileUrl: account.profileUrl,
     accountId: account.accountId, connected: account.connected, hasToken: !!account.accessToken,
   });
+});
+
+// ---------- Email: test + promotional blast ----------
+router.post('/email/test', authorize('SUPER_ADMIN', 'MARKETING_ADMIN'), async (req, res) => {
+  const { to } = req.body ?? {};
+  if (!to) return res.status(400).json({ error: 'Recipient email required' });
+  const r = await sendEmail(to, 'Silent Palms — test email', templates.promotion({ firstName: 'there' }, 'Email is connected ✅', 'This is a test from your Silent Palms Command Center. If you can read this, email sending works.'));
+  res.status(r.ok ? 200 : 400).json({ delivered: r.ok, error: r.error });
+});
+
+// Send a promotional email to a guest segment (all | leads | vip).
+router.post('/email/blast', authorize('SUPER_ADMIN', 'MARKETING_ADMIN'), async (req, res) => {
+  const { subject, message, segment = 'all' } = req.body ?? {};
+  if (!subject || !message) return res.status(400).json({ error: 'Subject and message are required' });
+
+  const where: any = { email: { not: null } };
+  if (segment === 'vip') where.isVip = true;
+  if (segment === 'leads') where.tags = { contains: 'lead' };
+  const guests = await prisma.guest.findMany({ where, take: 500 });
+
+  let sent = 0, failed = 0; let notConnected = false;
+  for (const g of guests) {
+    const r = await sendEmail(g.email!, subject, templates.promotion(g, subject, message));
+    if (r.ok) sent++; else { failed++; if (!r.connected) { notConnected = true; break; } }
+  }
+  if (notConnected) return res.status(400).json({ error: 'Email is not connected. Add your provider key in Settings → Email & Reviews.' });
+  res.json({ sent, failed, total: guests.length, message: `Promotion sent to ${sent} of ${guests.length} contacts` });
 });
 
 export default router;
