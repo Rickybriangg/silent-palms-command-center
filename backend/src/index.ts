@@ -23,11 +23,31 @@ app.use(morgan('combined'));
 app.use(express.json({ limit: '50mb' }));
 app.use(express.urlencoded({ extended: true, limit: '50mb' }));
 
-// Rate limiting
+// Rate limiting — global cap to blunt abuse/DoS
 app.use('/api', rateLimit({
   windowMs: 15 * 60 * 1000, // 15 min
   max: 500,
-  message: 'Too many requests, please try again later.'
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: { error: 'Too many requests, please try again later.' },
+}));
+
+// Stricter limiter on auth endpoints to stop brute-force/credential-stuffing.
+app.use(['/api/v1/auth/login', '/api/v1/auth/register', '/api/v1/auth/join'], rateLimit({
+  windowMs: 15 * 60 * 1000,
+  max: 12, // 12 attempts / 15 min per IP
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: { error: 'Too many attempts. Please wait 15 minutes and try again.' },
+}));
+
+// Tighter limiter on public website endpoints (bots/spam protection).
+app.use('/api/v1/public', rateLimit({
+  windowMs: 10 * 60 * 1000,
+  max: 60,
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: { error: 'Too many requests from this address.' },
 }));
 
 // Routes

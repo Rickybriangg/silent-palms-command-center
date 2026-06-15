@@ -14,6 +14,7 @@ import aiRoutes from './ai';
 import userRoutes from './users';
 import publicRoutes from './public';
 import financeRoutes from './finance'; // Finance & Staff Access plugin
+import notificationRoutes from './notifications';
 
 const router = Router();
 
@@ -32,5 +33,6 @@ router.use('/ai', aiRoutes);
 router.use('/users', userRoutes);
 router.use('/public', publicRoutes);
 router.use('/finance', financeRoutes); // Finance & Staff Access plugin
+router.use('/notifications', notificationRoutes);
 
 export default router;

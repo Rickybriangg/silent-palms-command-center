@@ -114,8 +114,8 @@ export default function BookingsPage() {
         {view === 'calendar' ? (
           <BookingCalendar />
         ) : (
-          <div className="bg-card border border-border rounded-xl overflow-hidden">
-            <table className="w-full text-sm">
+          <div className="bg-card border border-border rounded-xl overflow-x-auto">
+            <table className="w-full text-sm min-w-[820px]">
               <thead>
                 <tr className="border-b border-border">
                   {['Reference', 'Guest', 'Unit', 'Channel', 'Check In', 'Check Out', 'Nights', 'Amount', 'Status', ''].map(h => (
