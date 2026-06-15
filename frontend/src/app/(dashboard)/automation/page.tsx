@@ -23,6 +23,7 @@ const TRIGGER_LABELS: Record<string, string> = {
 
 const ACTION_ICONS: Record<string, string> = {
   SEND_WHATSAPP: '💬',
+  SEND_REVIEW_REQUEST: '⭐',
   CREATE_GUEST: '👤',
   UPDATE_REVENUE: '💰',
   NOTIFY_TEAM: '🔔',

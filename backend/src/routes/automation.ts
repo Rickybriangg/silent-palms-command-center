@@ -1,9 +1,17 @@
 import { Router } from 'express';
 import { authenticate } from '../middleware/auth';
 import { prisma } from '../lib/prisma';
+import { sendWhatsApp } from '../lib/whatsappSend';
+import { sendEmail, templates } from '../lib/email';
 
 const router = Router();
 router.use(authenticate);
+
+// Resolve the Google review link (full link or built from Place ID).
+async function getReviewLink() {
+  const gb = await prisma.socialAccount.findUnique({ where: { platform: 'GOOGLE_BUSINESS' } }).catch(() => null);
+  return gb?.profileUrl || (gb?.accountId ? `https://search.google.com/local/writereview?placeid=${gb.accountId}` : null);
+}
 
 router.get('/', async (_req, res) => {
   const workflows = await prisma.automationWorkflow.findMany({
@@ -63,7 +71,7 @@ async function findTargets(event: string) {
     case 'BOOKING_CREATED': default: where = { createdAt: { gte: weekAgo } }; stage = 'Booked'; break;
   }
   const bookings = await prisma.booking.findMany({ where, include: inc, orderBy: { updatedAt: 'desc' }, take: 25 });
-  return bookings.map(b => ({ bookingId: b.id, guestId: b.guestId, guest: `${b.guest.firstName} ${b.guest.lastName}`, unit: b.unit?.name ?? '', stage, reference: b.referenceNumber }));
+  return bookings.map(b => ({ bookingId: b.id, guestId: b.guestId, guest: `${b.guest.firstName} ${b.guest.lastName}`, firstName: b.guest.firstName, email: b.guest.email, phone: b.guest.whatsapp || b.guest.phone, unit: b.unit?.name ?? '', stage, reference: b.referenceNumber }));
 }
 
 router.post('/:id/run', async (req: any, res) => {
@@ -76,6 +84,7 @@ router.post('/:id/run', async (req: any, res) => {
   const event = trigger?.event ?? 'BOOKING_CREATED';
 
   const targets = await findTargets(event);
+  const reviewLink = await getReviewLink();
   const results: any[] = [];
 
   // Apply each action to each matched client.
@@ -88,8 +97,18 @@ router.post('/:id/run', async (req: any, res) => {
         results.push({ client: t.guest, stage: t.stage, action: `WhatsApp ${slug || 'message'}`, reference: t.reference });
       } else if (a.type === 'NOTIFY_TEAM') {
         results.push({ client: t.guest, stage: t.stage, action: 'Team notified', reference: t.reference });
-      } else if (a.type === 'SCHEDULE_REVIEW') {
-        results.push({ client: t.guest, stage: t.stage, action: 'Review request scheduled', reference: t.reference });
+      } else if (a.type === 'SCHEDULE_REVIEW' || a.type === 'SEND_REVIEW_REQUEST') {
+        // Actually send the review request (email + WhatsApp) with the Google review link.
+        const link = reviewLink;
+        let how = 'no review link set';
+        if (link) {
+          const waMsg = `Hi ${t.firstName}, thank you for staying at Silent Palms Villa! 🌴 We'd love a quick Google review: ${link}`;
+          const wa = await sendWhatsApp(t.phone, waMsg).catch(() => ({ ok: false } as any));
+          if (wa.ok) await prisma.whatsAppMessage.create({ data: { guestId: t.guestId, direction: 'OUTBOUND', body: waMsg, status: 'SENT' } }).catch(() => {});
+          const em = t.email ? await sendEmail(t.email, 'How was your stay at Silent Palms? ⭐', templates.reviewRequest({ firstName: t.firstName }, link)).catch(() => ({ ok: false } as any)) : { ok: false };
+          how = [wa.ok && 'WhatsApp', em.ok && 'email'].filter(Boolean).join(' + ') || 'queued (channels not connected)';
+        }
+        results.push({ client: t.guest, stage: t.stage, action: `Review request → ${how}`, reference: t.reference });
       } else {
         results.push({ client: t.guest, stage: t.stage, action: (a.type ?? 'action').replace(/_/g, ' '), reference: t.reference });
       }
