@@ -33,6 +33,7 @@ export default function AutomationPage() {
   const qc = useQueryClient();
   const [showNew, setShowNew] = useState(false);
   const [runResult, setRunResult] = useState<any | null>(null);
+  const [historyFor, setHistoryFor] = useState<string | null>(null);
 
   const { data: workflows = [] } = useQuery({
     queryKey: ['workflows'],
@@ -107,6 +108,9 @@ export default function AutomationPage() {
                   <Button size="sm" variant="outline" className="h-7 text-xs gap-1" disabled={runMutation.isPending} onClick={() => runMutation.mutate({ id: w.id, name: w.name })}>
                     <Play size={11} /> Run
                   </Button>
+                  <Button size="sm" variant="ghost" className="h-7 text-xs gap-1" onClick={() => setHistoryFor(historyFor === w.id ? null : w.id)}>
+                    <Clock size={11} /> History
+                  </Button>
                   <button
                     onClick={() => toggleMutation.mutate(w.id)}
                     title={w.isActive ? 'Active' : 'Paused'}
@@ -146,6 +150,8 @@ export default function AutomationPage() {
                   <Clock size={10} /> Last run: {new Date(w.lastRunAt).toLocaleString()}
                 </p>
               )}
+
+              {historyFor === w.id && <RunHistory workflowId={w.id} />}
             </motion.div>
           ))}
 
@@ -247,6 +253,35 @@ function NewWorkflowModal({ onClose, onSubmit, loading }: { onClose: () => void;
           </Button>
         </form>
       </motion.div>
+    </div>
+  );
+}
+
+function RunHistory({ workflowId }: { workflowId: string }) {
+  const { data: execs = [], isLoading } = useQuery({
+    queryKey: ['workflow-execs', workflowId],
+    queryFn: () => api.get(`/automation/${workflowId}/executions`).then(r => r.data),
+  });
+  return (
+    <div className="mt-3 border-t border-border/60 pt-3">
+      <p className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wider mb-2">Run history</p>
+      {isLoading ? (
+        <p className="text-xs text-muted-foreground">Loading…</p>
+      ) : execs.length === 0 ? (
+        <p className="text-xs text-muted-foreground">No runs yet — click Run to execute this workflow.</p>
+      ) : (
+        <div className="space-y-1.5">
+          {execs.map((e: any) => (
+            <div key={e.id} className="flex items-center justify-between text-xs bg-muted/40 rounded-md px-2.5 py-1.5">
+              <span className="text-muted-foreground">{new Date(e.startedAt).toLocaleString()}</span>
+              <div className="flex items-center gap-2">
+                <span className="font-medium">{e.context?.clients ?? 0} client{(e.context?.clients ?? 0) === 1 ? '' : 's'}</span>
+                <span className="text-[10px] px-1.5 py-0.5 rounded-full bg-emerald-100 text-emerald-700">{e.status}</span>
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
     </div>
   );
 }
