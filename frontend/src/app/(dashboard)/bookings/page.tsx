@@ -13,6 +13,7 @@ import { cn } from '@/lib/utils';
 import { toast } from 'sonner';
 import { motion } from 'framer-motion';
 import { BookingCalendar } from '@/components/bookings/BookingCalendar';
+import { formatMoney, currencySymbol } from '@/lib/currency';
 
 const UNITS = [
   { id: '1-bedroom-csuite', name: '1-Bedroom C-Suite', basePrice: 45 },
@@ -147,7 +148,7 @@ export default function BookingsPage() {
                     <td className="px-4 py-3 text-muted-foreground">{new Date(b.checkIn).toLocaleDateString()}</td>
                     <td className="px-4 py-3 text-muted-foreground">{new Date(b.checkOut).toLocaleDateString()}</td>
                     <td className="px-4 py-3 text-center">{b.nights}</td>
-                    <td className="px-4 py-3 font-semibold">${Number(b.totalAmount).toLocaleString()}</td>
+                    <td className="px-4 py-3 font-semibold">{formatMoney(b.totalAmount)}</td>
                     <td className="px-4 py-3">
                       <span className={cn('text-xs px-2 py-0.5 rounded-full font-medium', STATUS_COLORS[b.status] ?? 'bg-gray-100')}>{b.status}</span>
                     </td>
@@ -228,7 +229,7 @@ function NewBookingModal({ onClose, onSubmit, loading }: { onClose: () => void; 
         </div>
         <div className="grid grid-cols-2 gap-3">
           <div><Label>Adults</Label><Input type="number" min="1" value={form.adults} onChange={e => set('adults', e.target.value)} /></div>
-          <div><Label>Amount ($)</Label><Input type="number" value={form.baseAmount} onChange={e => set('baseAmount', e.target.value)} placeholder="500" /></div>
+          <div><Label>Amount ({currencySymbol()})</Label><Input type="number" value={form.baseAmount} onChange={e => set('baseAmount', e.target.value)} placeholder="500" /></div>
         </div>
         <div>
           <Label>Status</Label>
@@ -246,14 +247,14 @@ function NewBookingModal({ onClose, onSubmit, loading }: { onClose: () => void; 
 
 function generateInvoice(booking: any) {
   const g = booking.guest ?? {};
-  const cur = booking.currency ?? 'USD';
+  const cur = currencySymbol();
   const total = Number(booking.totalAmount ?? 0);
   const base = Number(booking.baseAmount ?? 0);
   const tax = Number(booking.taxAmount ?? 0);
   const paid = Number(booking.paidAmount ?? 0);
   const nights = booking.nights || 1;
   const rate = base && nights ? Math.round(base / nights) : (booking.unit?.basePrice ?? 0);
-  const money = (n: number) => `${cur} ${Number(n).toLocaleString(undefined, { minimumFractionDigits: 2 })}`;
+  const money = (n: number) => `${cur} ${Number(n).toLocaleString(undefined, { maximumFractionDigits: 0 })}`;
   const fmt = (d: any) => d ? new Date(d).toLocaleDateString('en-GB', { day: 'numeric', month: 'long', year: 'numeric' }) : '—';
 
   const html = `<!doctype html><html><head><meta charset="utf-8"><title>Invoice ${booking.referenceNumber}</title>
@@ -358,8 +359,8 @@ function ViewBookingModal({ booking, onClose }: { booking: any; onClose: () => v
         {row('Check-out', booking.checkOut ? new Date(booking.checkOut).toLocaleDateString() : '—')}
         {row('Nights', booking.nights)}
         {row('Adults', booking.adults)}
-        {row('Total', `$${Number(booking.totalAmount ?? 0).toLocaleString()}`)}
-        {row('Paid', `$${Number(booking.paidAmount ?? 0).toLocaleString()}`)}
+        {row('Total', formatMoney(booking.totalAmount))}
+        {row('Paid', formatMoney(booking.paidAmount))}
       </div>
       {booking.status === 'AWAITING_APPROVAL' && (
         <div className="grid grid-cols-2 gap-2 mt-4">

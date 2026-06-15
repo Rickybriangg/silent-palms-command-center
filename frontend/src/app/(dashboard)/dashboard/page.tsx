@@ -11,6 +11,7 @@ import { RevenueChart } from '@/components/dashboard/RevenueChart';
 import { OccupancyHeatmap } from '@/components/dashboard/OccupancyHeatmap';
 import { BookingFunnel } from '@/components/dashboard/BookingFunnel';
 import { ChannelBreakdown } from '@/components/dashboard/ChannelBreakdown';
+import { currencySymbol } from '@/lib/currency';
 
 export default function DashboardPage() {
   const { data: stats, isLoading } = useQuery({
@@ -34,7 +35,7 @@ export default function DashboardPage() {
             value={stats?.revenueToday ?? 0}
             icon={<DollarSign size={16} />}
             color="primary"
-            prefix="$"
+            prefix={`${currencySymbol()} `}
             loading={isLoading}
           />
           <KpiCard
@@ -44,7 +45,7 @@ export default function DashboardPage() {
             changeLabel="vs last month"
             icon={<TrendingUp size={16} />}
             color="secondary"
-            prefix="$"
+            prefix={`${currencySymbol()} `}
             loading={isLoading}
           />
           <KpiCard

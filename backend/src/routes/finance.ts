@@ -95,7 +95,7 @@ router.post('/expenses', async (req: AuthRequest, res) => {
   const { category, amount, vendor, description, date, currency } = req.body ?? {};
   if (!category || amount == null) return res.status(400).json({ error: 'Category and amount are required' });
   const expense = await prisma.expense.create({
-    data: { category, amount: Number(amount), vendor: vendor || null, description: description || null, currency: currency || 'USD', date: date ? new Date(date) : new Date() },
+    data: { category, amount: Number(amount), vendor: vendor || null, description: description || null, currency: currency || 'KES', date: date ? new Date(date) : new Date() },
   });
   await prisma.expenseApproval.create({ data: { expenseId: expense.id, status: 'PENDING', requestedBy: req.user?.email ?? null } });
   await audit(req, 'SUBMIT', 'Expense', expense.id, { amount, category });

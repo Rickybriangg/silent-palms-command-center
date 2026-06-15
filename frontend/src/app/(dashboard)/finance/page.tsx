@@ -8,6 +8,7 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { ArrowDownLeft, ArrowUpRight, Wallet, ClipboardCheck, Tags, ShieldCheck, History, Plus, X, Loader2, Lock, Check, Ban } from 'lucide-react';
 import { cn } from '@/lib/utils';
+import { formatMoney, currencySymbol } from '@/lib/currency';
 import { toast } from 'sonner';
 import { motion } from 'framer-motion';
 import { useAuthStore } from '@/store/authStore';
@@ -66,7 +67,7 @@ export default function FinancePage() {
 
 function Overview() {
   const { data } = useQuery({ queryKey: ['finance-overview'], queryFn: () => api.get('/finance/overview').then(r => r.data) });
-  const money = (n: number) => `$${Number(n ?? 0).toLocaleString()}`;
+  const money = (n: number) => formatMoney(n);
   return (
     <div className="space-y-5">
       <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
@@ -151,7 +152,7 @@ function Approvals() {
               <td className="py-2 text-muted-foreground">{new Date(e.date).toLocaleDateString()}</td>
               <td>{e.category}</td>
               <td className="text-muted-foreground">{e.vendor ?? '—'}</td>
-              <td className="text-right font-medium">${Number(e.amount).toLocaleString()}</td>
+              <td className="text-right font-medium">{formatMoney(e.amount)}</td>
               <td className="text-center"><span className={cn('text-[10px] px-2 py-0.5 rounded-full font-medium', STATUS[e.status])}>{e.status}</span></td>
               <td className="text-right">
                 {e.status === 'PENDING' && (
@@ -187,7 +188,7 @@ function ExpenseModal({ cats, onClose, onSubmit, loading }: { cats: any[]; onClo
           </select>
         </div>
         <div className="grid grid-cols-2 gap-3">
-          <div><Label>Amount ($)</Label><Input type="number" value={form.amount} onChange={e => set('amount', e.target.value)} required /></div>
+          <div><Label>Amount ({currencySymbol()})</Label><Input type="number" value={form.amount} onChange={e => set('amount', e.target.value)} required /></div>
           <div><Label>Date</Label><Input type="date" value={form.date} onChange={e => set('date', e.target.value)} /></div>
         </div>
         <div><Label>Vendor</Label><Input value={form.vendor} onChange={e => set('vendor', e.target.value)} placeholder="Coastal Pool Services" /></div>
@@ -219,7 +220,7 @@ function Budgets() {
         {cats.map((c: any) => (
           <div key={c.id} className="flex items-center justify-between py-2.5 text-sm">
             <span className="font-medium">{c.name}</span>
-            <span className="text-muted-foreground">Budget: ${Number(c.monthlyBudget).toLocaleString()}/mo</span>
+            <span className="text-muted-foreground">Budget: {formatMoney(c.monthlyBudget)}/mo</span>
           </div>
         ))}
         {cats.length === 0 && <p className="py-6 text-center text-muted-foreground text-sm">No categories yet.</p>}

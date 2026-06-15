@@ -109,7 +109,7 @@ router.post('/booking', async (req, res) => {
       referenceNumber: ref(), guestId: guest.id, unitId, propertyId: unit.propertyId,
       channel: 'WEBSITE', status, checkIn: ci, checkOut: co, nights,
       adults: pax, children: Number(children ?? 0),
-      baseAmount, taxAmount, totalAmount, currency: 'USD',
+      baseAmount, taxAmount, totalAmount, currency: 'KES',
       notes: message || null,
     },
   });

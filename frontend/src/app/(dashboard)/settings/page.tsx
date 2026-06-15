@@ -7,8 +7,9 @@ import { useAuthStore } from '@/store/authStore';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import { MapPin, User, Palmtree, Bell, Share2, CheckCircle2, Loader2, RefreshCw, Upload, Users, Globe, Mail, Star, Send } from 'lucide-react';
+import { MapPin, User, Palmtree, Bell, Share2, CheckCircle2, Loader2, RefreshCw, Upload, Users, Globe, Mail, Star, Send, Coins } from 'lucide-react';
 import { toast } from 'sonner';
+import { CURRENCIES, getCurrency, setCurrency } from '@/lib/currency';
 
 const CHANNELS = [
   { key: 'CHANNEL_AIRBNB', label: 'Airbnb' },
@@ -56,6 +57,8 @@ export default function SettingsPage() {
         </section>
 
         <BookingChannels />
+
+        <CurrencySetting />
 
         <WebsiteIntegration />
 
@@ -121,6 +124,25 @@ function BookingChannels() {
           );
         })}
       </div>
+    </section>
+  );
+}
+
+function CurrencySetting() {
+  const [cur, setCur] = useState('KES');
+  useEffect(() => { setCur(getCurrency()); }, []);
+  const onChange = (code: string) => {
+    setCur(code); setCurrency(code);
+    toast.success('Currency updated — refreshing…');
+    setTimeout(() => window.location.reload(), 700);
+  };
+  return (
+    <section className="bg-card border border-border rounded-xl p-6">
+      <div className="flex items-center gap-2 mb-1"><Coins size={16} className="text-primary" /><h3 className="font-semibold">Currency</h3></div>
+      <p className="text-xs text-muted-foreground mb-4">Sets how amounts display across dashboards, bookings, finance, invoices and reports. Default: Kenyan Shilling.</p>
+      <select className="w-full max-w-xs h-9 rounded-md border border-input bg-background px-3 text-sm" value={cur} onChange={e => onChange(e.target.value)}>
+        {CURRENCIES.map(c => <option key={c.code} value={c.code}>{c.label}</option>)}
+      </select>
     </section>
   );
 }

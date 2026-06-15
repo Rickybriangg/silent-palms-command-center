@@ -10,6 +10,7 @@ import { useState } from 'react';
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts';
 import { toast } from 'sonner';
 import { useAuthStore } from '@/store/authStore';
+import { formatMoney, currencySymbol } from '@/lib/currency';
 
 const FINANCE_ROLES = ['SUPER_ADMIN', 'FINANCE_MANAGER'];
 
@@ -71,11 +72,11 @@ export default function RevenuePage() {
 
         {/* KPIs */}
         <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-4">
-          <KpiCard title="Revenue" value={summary?.revenue ?? 0} prefix="$" icon={<DollarSign size={16} />} color="primary" />
-          <KpiCard title="Expenses" value={summary?.expenses ?? 0} prefix="$" icon={<TrendingDown size={16} />} color="rose" />
-          <KpiCard title="Profit" value={summary?.profit ?? 0} prefix="$" icon={<TrendingUp size={16} />} color="emerald" />
-          <KpiCard title="ADR" value={summary?.adr ?? 0} prefix="$" icon={<BarChart2 size={16} />} color="secondary" />
-          <KpiCard title="RevPAR" value={summary?.revpar ?? 0} prefix="$" icon={<BarChart2 size={16} />} color="accent" />
+          <KpiCard title="Revenue" value={summary?.revenue ?? 0} prefix={`${currencySymbol()} `} icon={<DollarSign size={16} />} color="primary" />
+          <KpiCard title="Expenses" value={summary?.expenses ?? 0} prefix={`${currencySymbol()} `} icon={<TrendingDown size={16} />} color="rose" />
+          <KpiCard title="Profit" value={summary?.profit ?? 0} prefix={`${currencySymbol()} `} icon={<TrendingUp size={16} />} color="emerald" />
+          <KpiCard title="ADR" value={summary?.adr ?? 0} prefix={`${currencySymbol()} `} icon={<BarChart2 size={16} />} color="secondary" />
+          <KpiCard title="RevPAR" value={summary?.revpar ?? 0} prefix={`${currencySymbol()} `} icon={<BarChart2 size={16} />} color="accent" />
           <KpiCard title="ROI" value={summary?.roi ?? 0} suffix="%" icon={<Percent size={16} />} color="blue" />
         </div>
 
@@ -118,7 +119,7 @@ export default function RevenuePage() {
                 <div key={item.label} className="flex items-center justify-between py-3 border-b border-border last:border-0">
                   <span className="text-sm text-muted-foreground">{item.label}</span>
                   <span className={`text-sm ${item.color}`}>
-                    {item.value < 0 ? '-' : ''}${Math.abs(item.value).toLocaleString()}
+                    {item.value < 0 ? '-' : ''}{formatMoney(Math.abs(item.value))}
                   </span>
                 </div>
               ))}
@@ -152,15 +153,15 @@ export default function RevenuePage() {
             <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-5">
               <div className="rounded-xl border border-emerald-200 dark:border-emerald-900 bg-emerald-50 dark:bg-emerald-900/20 p-4">
                 <div className="flex items-center gap-2 text-emerald-700 dark:text-emerald-400"><ArrowDownLeft size={15} /><span className="text-xs font-medium">Money In (Inflow)</span></div>
-                <p className="text-2xl font-bold mt-1 text-emerald-700 dark:text-emerald-400">${Number(cashflow?.totalIn ?? 0).toLocaleString()}</p>
+                <p className="text-2xl font-bold mt-1 text-emerald-700 dark:text-emerald-400">{formatMoney(cashflow?.totalIn)}</p>
               </div>
               <div className="rounded-xl border border-rose-200 dark:border-rose-900 bg-rose-50 dark:bg-rose-900/20 p-4">
                 <div className="flex items-center gap-2 text-rose-700 dark:text-rose-400"><ArrowUpRight size={15} /><span className="text-xs font-medium">Money Out (Outflow)</span></div>
-                <p className="text-2xl font-bold mt-1 text-rose-700 dark:text-rose-400">${Number(cashflow?.totalOut ?? 0).toLocaleString()}</p>
+                <p className="text-2xl font-bold mt-1 text-rose-700 dark:text-rose-400">{formatMoney(cashflow?.totalOut)}</p>
               </div>
               <div className="rounded-xl border border-primary/30 bg-primary/5 p-4">
                 <div className="flex items-center gap-2 text-primary"><Wallet size={15} /><span className="text-xs font-medium">Net Position</span></div>
-                <p className={`text-2xl font-bold mt-1 ${Number(cashflow?.net ?? 0) >= 0 ? 'text-primary' : 'text-rose-600'}`}>${Number(cashflow?.net ?? 0).toLocaleString()}</p>
+                <p className={`text-2xl font-bold mt-1 ${Number(cashflow?.net ?? 0) >= 0 ? 'text-primary' : 'text-rose-600'}`}>{formatMoney(cashflow?.net)}</p>
               </div>
             </div>
 
@@ -169,7 +170,7 @@ export default function RevenuePage() {
                 <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide mb-2">Inflow by source</p>
                 {(cashflow?.inflow ?? []).map((r: any) => (
                   <div key={r.category} className="flex justify-between text-sm py-1.5 border-b border-border/50">
-                    <span className="text-muted-foreground">{r.category}</span><span className="font-medium text-emerald-600">+${Number(r.amount).toLocaleString()}</span>
+                    <span className="text-muted-foreground">{r.category}</span><span className="font-medium text-emerald-600">+{formatMoney(r.amount)}</span>
                   </div>
                 ))}
                 {(cashflow?.inflow ?? []).length === 0 && <p className="text-xs text-muted-foreground py-2">No income recorded this period.</p>}
@@ -178,7 +179,7 @@ export default function RevenuePage() {
                 <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide mb-2">Outflow by category</p>
                 {(cashflow?.outflow ?? []).map((r: any) => (
                   <div key={r.category} className="flex justify-between text-sm py-1.5 border-b border-border/50">
-                    <span className="text-muted-foreground">{r.category}</span><span className="font-medium text-rose-600">-${Number(r.amount).toLocaleString()}</span>
+                    <span className="text-muted-foreground">{r.category}</span><span className="font-medium text-rose-600">-{formatMoney(r.amount)}</span>
                   </div>
                 ))}
                 {(cashflow?.outflow ?? []).length === 0 && <p className="text-xs text-muted-foreground py-2">No expenses recorded this period.</p>}
@@ -199,7 +200,7 @@ export default function RevenuePage() {
 
 function generateFinanceReport(cashflow: any, period: string, kind: 'expenses' | 'cashflow') {
   if (!cashflow) { toast.error('No data to export yet'); return; }
-  const money = (n: number) => `$${Number(n ?? 0).toLocaleString(undefined, { minimumFractionDigits: 2 })}`;
+  const money = (n: number) => `${currencySymbol()} ${Number(n ?? 0).toLocaleString(undefined, { maximumFractionDigits: 0 })}`;
   const fmt = (d: any) => d ? new Date(d).toLocaleDateString('en-GB') : '';
   const title = kind === 'expenses' ? 'Expenses Report' : 'Cash Flow Statement';
   const rows = kind === 'expenses'

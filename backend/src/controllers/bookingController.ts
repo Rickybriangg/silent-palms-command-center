@@ -68,7 +68,7 @@ export const createBooking = async (req: AuthRequest, res: Response) => {
       adults: Number(data.adults ?? 1),
       children: Number(data.children ?? 0),
       baseAmount, taxAmount, totalAmount,
-      currency: data.currency || 'USD',
+      currency: data.currency || 'KES',
       notes: data.notes || null,
       checkIn: new Date(data.checkIn),
       checkOut: new Date(data.checkOut),
